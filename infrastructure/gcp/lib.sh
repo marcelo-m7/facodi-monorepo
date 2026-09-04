@@ -72,3 +72,29 @@ ensure_project_role() {
     --role="$role" \
     --quiet >/dev/null
 }
+
+ensure_artifact_repository_role() {
+  local member="$1"
+  local role="$2"
+  local existing
+
+  existing="$(gcloud artifacts repositories get-iam-policy "$GCP_ARTIFACT_REPOSITORY" \
+    --project "$GCP_PROJECT_ID" \
+    --location "$GCP_REGION" \
+    --flatten='bindings[].members' \
+    --filter="bindings.role=$role AND bindings.members=$member" \
+    --format='value(bindings.role)' | head -n1)"
+
+  if [[ "$existing" == "$role" ]]; then
+    log "Artifact Registry binding already present: $member -> $role"
+    return 0
+  fi
+
+  log "granting Artifact Registry role: $member -> $role"
+  gcloud artifacts repositories add-iam-policy-binding "$GCP_ARTIFACT_REPOSITORY" \
+    --project "$GCP_PROJECT_ID" \
+    --location "$GCP_REGION" \
+    --member "$member" \
+    --role "$role" \
+    --quiet >/dev/null
+}
