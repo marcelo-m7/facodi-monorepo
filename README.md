@@ -81,6 +81,7 @@ infrastructure/
     validate-staging.sh     cloud validation + GitHub variable output
     vm-startup.sh           Docker/gcloud VM preparation
 scripts/
+  gcp-login.sh              interactive gcloud install/login + local dotenv setup
   build-image.sh            build/push one immutable image
   deploy-image.sh           deploy a supplied image URI on a VM
   healthcheck.sh            HTTP readiness verification
@@ -123,19 +124,36 @@ Odoo is bound to `127.0.0.1:8069` by default. Put a reverse proxy in front of it
 
 The repository includes an idempotent `gcloud` bootstrap for the first staging environment. It expects the FACODI VPC/subnet to exist already and validates that the subnet is dual-stack with external IPv6.
 
-Run it from an authenticated operator machine:
+For an operator workstation, the helper below checks whether Google Cloud CLI is installed. If it is missing on Debian, Ubuntu or the Debian Linux environment used by ChromeOS, it asks before installing it from Google's official APT repository. It then performs interactive login, lists the accessible projects, validates the selected FACODI project and upserts the non-sensitive GCP/FACODI configuration into the existing `.env` without deleting unrelated entries:
 
 ```bash
-gcloud auth login
-GCP_PROJECT_ID=YOUR_PROJECT_ID \
-  bash infrastructure/gcp/bootstrap-staging.sh
+bash scripts/gcp-login.sh
+```
+
+The helper never writes Google OAuth access/refresh tokens or service-account private keys to `.env`; those credentials remain managed by `gcloud`. The `.env` file remains ignored by Git and is set to mode `0600`.
+
+After login, load the values and run the bootstrap:
+
+```bash
+set -a
+source .env
+set +a
+
+bash infrastructure/gcp/bootstrap-staging.sh
 ```
 
 Then validate and obtain the exact GitHub variable values:
 
 ```bash
+bash infrastructure/gcp/validate-staging.sh
+```
+
+You can still use the explicit form if preferred:
+
+```bash
+gcloud auth login
 GCP_PROJECT_ID=YOUR_PROJECT_ID \
-  bash infrastructure/gcp/validate-staging.sh
+  bash infrastructure/gcp/bootstrap-staging.sh
 ```
 
 The bootstrap creates no service-account JSON key and no Odoo/PostgreSQL password. Keep `DEPLOY_STAGING_ENABLED=false` until `/opt/facodi/.env` exists on the VM and validation succeeds.
@@ -150,13 +168,14 @@ Pull requests run:
 checkout recursive submodules
        -> repository contract
        -> GCP bootstrap contract
+       -> GCP login helper contract
        -> Compose validation
        -> immutable Docker build
        -> PostgreSQL startup
        -> clean installation of discovered Odoo modules
 ```
 
-The integration test therefore validates the exact addon commits pinned by the monorepo, not placeholders or mocks. The GCP bootstrap contract is static/syntax validation and does not require cloud credentials.
+The integration test therefore validates the exact addon commits pinned by the monorepo, not placeholders or mocks. The GCP bootstrap and login-helper contracts run without cloud credentials.
 
 ## CD
 
