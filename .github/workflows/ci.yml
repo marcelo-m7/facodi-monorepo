@@ -30,6 +30,9 @@ jobs:
       - name: GCP bootstrap contract
         run: bash tests/test_gcp_bootstrap_contract.sh
 
+      - name: GCP login helper contract
+        run: bash tests/test_gcp_login_helper.sh
+
       - name: Validate Compose configuration
         run: docker compose --env-file .env.example -f infrastructure/docker-compose.yml config --quiet
 
