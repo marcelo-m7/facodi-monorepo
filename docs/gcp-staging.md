@@ -11,6 +11,7 @@ The bootstrap uses the current `gcloud` identity to create or validate:
 - GitHub Workload Identity Pool/provider restricted to `marcelo-m7/facodi-monorepo`;
 - `facodi-github-deploy` service account for GitHub Actions;
 - `facodi-runtime` service account for the VM;
+- repository-scoped Artifact Registry writer/reader IAM;
 - public IPv4/IPv6 HTTP/HTTPS firewall rules;
 - IAP-only SSH firewall rule;
 - a regional static external IPv4 address;
@@ -58,7 +59,13 @@ ipv6AccessType: EXTERNAL
 
 ## One-time bootstrap
 
-From a recursive clone of `facodi-monorepo`:
+Show the available configuration without credentials:
+
+```bash
+bash infrastructure/gcp/bootstrap-staging.sh --help
+```
+
+Run the bootstrap from an authenticated recursive clone of `facodi-monorepo`:
 
 ```bash
 GCP_PROJECT_ID=YOUR_PROJECT_ID \
@@ -87,9 +94,7 @@ GCP_PROJECT_ID=YOUR_PROJECT_ID \
   bash infrastructure/gcp/validate-staging.sh
 ```
 
-A successful run prints the repository variables expected by GitHub Actions, including the full Workload Identity Provider resource name.
-
-It also prints the public IPv4 and IPv6 values allocated to the staging VM for later DNS configuration.
+A successful run prints the repository variables expected by GitHub Actions, including the full Workload Identity Provider resource name. It also prints the public IPv4 and IPv6 values allocated to the staging VM for later DNS configuration.
 
 ## GitHub repository variables
 
@@ -121,11 +126,7 @@ STAGING_VM_ZONE
 STAGING_DEPLOY_PATH
 ```
 
-The default deploy path is:
-
-```text
-/opt/facodi
-```
+The default deploy path is `/opt/facodi`.
 
 ## Create the VM runtime `.env`
 
@@ -147,17 +148,19 @@ sudo docker compose version
 gcloud --version
 ```
 
-Create the runtime configuration. Generate the two sensitive values locally in the SSH session so they never pass through GitHub:
+Generate the two sensitive values inside the SSH session so they never pass through GitHub:
 
 ```bash
 POSTGRES_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')"
 ODOO_ADMIN_PASSWD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')"
+```
 
-sudo mkdir -p /opt/facodi
-sudo chown "$(id -un):$(id -gn)" /opt/facodi
-umask 077
+Create the runtime configuration as a **root-owned secret**. The GitHub OS Login identity does not need direct read access to `.env`; the final deployment script is executed with OS Login administrative `sudo` access.
 
-cat > /opt/facodi/.env <<EOF
+```bash
+sudo install -d -m 0755 /opt/facodi
+
+sudo tee /opt/facodi/.env >/dev/null <<EOF
 FACODI_MODULES=facodi_learning,website_facodi
 POSTGRES_USER=odoo
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
@@ -170,10 +173,14 @@ ODOO_MAX_CRON_THREADS=1
 ODOO_HEALTHCHECK_URL=http://127.0.0.1:8069/web/login
 EOF
 
-chmod 600 /opt/facodi/.env
+sudo chown root:root /opt/facodi/.env
+sudo chmod 600 /opt/facodi/.env
+unset POSTGRES_PASSWORD ODOO_ADMIN_PASSWD
 ```
 
 Store the generated Odoo master password in the project's secure credential store if operators need it later. Do not commit the `.env` file.
+
+This root-only ownership is intentional: a human operator and the GitHub service account use different OS Login Unix identities. Keeping `.env` owned by a human user with mode `600` would make automated deployment unable to read it.
 
 ## Enable the first staging deployment
 
@@ -193,16 +200,19 @@ The workflow will:
 4. push the SHA-tagged image to Artifact Registry;
 5. connect to `facodi-app-01` through IAP;
 6. copy only Compose and deployment scripts;
-7. authenticate Docker with the VM runtime identity's short-lived access token;
-8. pull the exact image;
-9. install/update `facodi_learning` and `website_facodi`;
-10. start Odoo and perform the HTTP health check.
+7. run the deployment script under OS Login administrative `sudo` so it can read root-owned runtime secrets;
+8. authenticate Docker with the VM runtime identity's short-lived access token;
+9. pull the exact image;
+10. install/update `facodi_learning` and `website_facodi`;
+11. start Odoo and perform the HTTP health check.
 
 ## DNS and reverse proxy
 
 The VM has IPv4 and IPv6, but Odoo remains bound to loopback ports `8069` and `8072`. The Google Cloud firewall exposes only TCP 80/443 publicly.
 
 Do not point public DNS at the VM until a reverse proxy with TLS has been configured. DNS/reverse-proxy configuration is intentionally a separate deployment step.
+
+The bootstrap reserves the external IPv4 address. The automatically assigned external IPv6 address is not treated as a separately reserved static IPv6 resource by this implementation.
 
 ## Re-running safely
 
