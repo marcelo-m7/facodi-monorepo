@@ -38,39 +38,49 @@ The running Odoo container never performs `git pull`. Every deployed image conta
 
 ## Addon repositories
 
-The planned repositories are:
+The active submodules are:
 
 - `marcelo-m7/facodi-learning` -> Odoo technical module `facodi_learning`
-- `marcelo-m7/facodi-theme` -> Odoo technical module `facodi_theme`
+- `marcelo-m7/facodi-theme` -> Odoo technical module `website_facodi`
 
-Until these repositories exist, the matching directories under `addons/` contain only placeholder README files.
+The repository names and Odoo technical module names are intentionally independent. The Git submodule stores a repository commit; the Docker image discovers the Odoo module directories inside each checked-out repository and copies them into `/mnt/extra-addons`.
 
-Once both repositories exist:
+Current submodule paths:
 
-```bash
-bash scripts/attach-submodules.sh
+```text
+addons/facodi-learning
+addons/facodi-theme
 ```
 
-That converts the two placeholder directories into real Git submodules and creates `.gitmodules`.
+Clone locally with:
+
+```bash
+git clone --recurse-submodules https://github.com/marcelo-m7/facodi-monorepo.git
+```
+
+For an existing clone:
+
+```bash
+git submodule update --init --recursive
+```
 
 ## Repository structure
 
 ```text
 addons/
-  facodi-learning/          future Git submodule
-  facodi-theme/             future Git submodule
+  facodi-learning/          Git submodule
+  facodi-theme/             Git submodule
 docker/
-  Dockerfile                Odoo 19 image with addons baked in
+  Dockerfile                Odoo 19 image with discovered modules baked in
 infrastructure/
   docker-compose.yml        persistent Odoo/PostgreSQL runtime
 scripts/
-  attach-submodules.sh      convert placeholders to Git submodules
   build-image.sh            build/push one immutable image
   deploy-image.sh           deploy a supplied image URI on a VM
   healthcheck.sh            HTTP readiness verification
   validate-repository.sh    architecture safety checks
 .github/workflows/
-  ci.yml                    contract, Compose and Docker validation
+  ci.yml                    contract, Compose, image build and clean install
   build-image.yml           reusable WIF + Artifact Registry build
   deploy-staging.yml        staging image build + Compute Engine deploy
   deploy-production.yml     production image build + Compute Engine deploy
@@ -107,18 +117,19 @@ Odoo is bound to `127.0.0.1:8069` by default. Put a reverse proxy in front of it
 Pull requests run:
 
 ```text
-repository contract
+checkout recursive submodules
+       -> repository contract
        -> Compose validation
-       -> Docker build
+       -> immutable Docker build
        -> PostgreSQL startup
-       -> install any FACODI modules discovered in the checked-out submodules
+       -> clean installation of discovered Odoo modules
 ```
 
-The placeholders are intentionally accepted until `facodi-learning` and `facodi-theme` are created.
+The integration test therefore validates the exact addon commits pinned by the monorepo, not placeholders or mocks.
 
 ## CD
 
-The intended branch mapping remains:
+The intended branch mapping is:
 
 ```text
 staging -> staging FACODI environment
@@ -149,12 +160,13 @@ GCP_ARTIFACT_REPOSITORY
 FACODI_IMAGE_NAME
 GCP_WORKLOAD_IDENTITY_PROVIDER
 GCP_GITHUB_SERVICE_ACCOUNT
+DEPLOY_STAGING_ENABLED=false
+DEPLOY_PRODUCTION_ENABLED=false
 ```
 
 Staging environment variables:
 
 ```text
-DEPLOY_STAGING_ENABLED=false
 STAGING_VM_NAME
 STAGING_VM_ZONE
 STAGING_DEPLOY_PATH
@@ -163,7 +175,6 @@ STAGING_DEPLOY_PATH
 Production environment variables:
 
 ```text
-DEPLOY_PRODUCTION_ENABLED=false
 PRODUCTION_VM_NAME
 PRODUCTION_VM_ZONE
 PRODUCTION_DEPLOY_PATH
