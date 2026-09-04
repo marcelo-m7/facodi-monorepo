@@ -37,6 +37,43 @@ The container never executes `git clone`, `git fetch`, `git checkout` or `git pu
 
 The Docker build copies the checked-out addon repositories to a build-only source directory, discovers immediate Odoo module directories containing `__manifest__.py`, and copies those modules to `/mnt/extra-addons`. This allows each addon repository to keep repository-level documentation, workflows and other files outside the technical Odoo module directory.
 
+## One-time Google Cloud bootstrap
+
+The one-time infrastructure bootstrap is intentionally separate from recurring CI/CD.
+
+```text
+operator + gcloud
+      |
+      v
+infrastructure/gcp/bootstrap-staging.sh
+      |
+      +--> required APIs
+      +--> Artifact Registry
+      +--> GitHub Workload Identity Federation
+      +--> deploy/runtime service accounts
+      +--> IAP + OS Login IAM
+      +--> dual-stack Compute Engine VM
+      +--> IPv4/IPv6 web firewall + IAP-only SSH
+```
+
+Run:
+
+```bash
+GCP_PROJECT_ID=YOUR_PROJECT_ID \
+  bash infrastructure/gcp/bootstrap-staging.sh
+```
+
+Then validate:
+
+```bash
+GCP_PROJECT_ID=YOUR_PROJECT_ID \
+  bash infrastructure/gcp/validate-staging.sh
+```
+
+The validator prints the exact repository/environment variables needed by GitHub Actions. See [`gcp-staging.md`](gcp-staging.md) for the operator procedure.
+
+The bootstrap does not create production resources, DNS records or application passwords.
+
 ## GitHub authentication to Google Cloud
 
 GitHub Actions uses OpenID Connect and Google Workload Identity Federation. Do not create or upload a long-lived service-account JSON key.
@@ -66,20 +103,41 @@ DEPLOY_PRODUCTION_ENABLED=false
 
 Use the actual Google Cloud project ID and Workload Identity resource names created for the project.
 
-The GitHub deployment service account needs only the permissions required to:
-
-1. push images to the selected Artifact Registry repository;
-2. connect to the selected Compute Engine VM using the chosen Google Cloud SSH/OS Login model.
-
-Grant these permissions as narrowly as possible at project, repository and instance level.
+The bootstrap restricts the WIF provider to the exact GitHub repository `marcelo-m7/facodi-monorepo`. The deploy identity receives the permissions required to push Artifact Registry images and connect to the staging VM through IAP + OS Login. The VM has a separate runtime identity with Artifact Registry read access.
 
 ## Compute Engine runtime identity
 
-The VM should use its own Google Cloud service account. That VM service account needs Artifact Registry read access so the VM can pull the SHA-tagged image.
+The VM uses its own `facodi-runtime` Google Cloud service account and pulls the exact SHA-tagged Artifact Registry image with short-lived credentials from the instance metadata identity.
 
-`deploy-image.sh` runs `gcloud auth configure-docker <region>-docker.pkg.dev` on the VM and therefore expects the Google Cloud CLI to be installed there.
+`deploy-image.sh` obtains an access token with:
+
+```bash
+gcloud auth print-access-token
+```
+
+and pipes that short-lived token to the Docker login command. This works whether Docker is directly available to the OS Login user or must be executed through passwordless sudo.
 
 No Artifact Registry password or service-account JSON file is copied from GitHub to the VM.
+
+## Administrative access
+
+Staging SSH/SCP is forced through IAP TCP forwarding:
+
+```text
+GitHub Actions
+     |
+     | OIDC/WIF
+     v
+Google deploy service account
+     |
+     | IAP TCP tunnel
+     v
+VM internal IPv4 :22
+```
+
+The firewall allows TCP 22 only from Google's IAP TCP forwarding range `35.235.240.0/20` to instances tagged `facodi-admin`.
+
+There is no `0.0.0.0/0 -> tcp:22` or `::/0 -> tcp:22` rule created by the FACODI bootstrap.
 
 ## Environment-specific GitHub variables
 
@@ -105,7 +163,7 @@ A typical deployment path is `/opt/facodi`.
 
 ## VM `.env`
 
-The workflow deliberately does not overwrite `.env` on the server. Create it once on each VM from `.env.example` and protect it with server filesystem permissions.
+The workflow deliberately does not overwrite `.env` on the server. Create it once on each VM and protect it with filesystem permissions.
 
 Required runtime values include:
 
@@ -118,6 +176,8 @@ FACODI_MODULES=facodi_learning,website_facodi
 
 `FACODI_IMAGE` is supplied by the deployment script for each release and does not need to be permanently pinned in `.env`.
 
+For staging, follow the generated-secret procedure in [`gcp-staging.md`](gcp-staging.md) and keep `/opt/facodi/.env` readable only by the deployment user.
+
 ## Deployment sequence
 
 For `staging` and `main`, when the respective deployment flag is enabled:
@@ -128,8 +188,8 @@ For `staging` and `main`, when the respective deployment flag is enabled:
 4. Docker discovers and bakes the technical Odoo modules from the pinned addon repositories into the image.
 5. The image is pushed to Artifact Registry under `${GITHUB_SHA}`.
 6. The deploy job authenticates to Google Cloud using WIF again.
-7. GitHub copies only `docker-compose.yml`, `deploy-image.sh` and `healthcheck.sh` to the VM.
-8. The VM authenticates Docker to Artifact Registry using its own Google identity.
+7. For staging, GitHub opens IAP SSH/SCP tunnels and copies only `docker-compose.yml`, `deploy-image.sh` and `healthcheck.sh` to the VM.
+8. The VM obtains a short-lived Google access token from its own runtime identity and authenticates Docker to Artifact Registry.
 9. The VM pulls the exact SHA-tagged image.
 10. PostgreSQL is started.
 11. Missing FACODI modules are installed and already-installed FACODI modules are upgraded.
