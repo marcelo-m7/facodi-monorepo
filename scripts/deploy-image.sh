@@ -31,8 +31,17 @@ for module in ${FACODI_MODULES//,/ }; do
   fi
 done
 
+if docker info >/dev/null 2>&1; then
+  DOCKER=(docker)
+elif sudo -n docker info >/dev/null 2>&1; then
+  DOCKER=(sudo -n docker)
+else
+  echo "docker is unavailable to the deployment user" >&2
+  exit 69
+fi
+
 export FACODI_IMAGE="$IMAGE_URI"
-COMPOSE=(docker compose --env-file "$ROOT_DIR/.env" -f infrastructure/docker-compose.yml)
+COMPOSE=("${DOCKER[@]}" compose --env-file "$ROOT_DIR/.env" -f infrastructure/docker-compose.yml)
 
 registry="${IMAGE_URI%%/*}"
 if [[ "$registry" == *-docker.pkg.dev ]]; then
@@ -40,7 +49,8 @@ if [[ "$registry" == *-docker.pkg.dev ]]; then
     echo "gcloud is required on the VM to authenticate Docker to Artifact Registry" >&2
     exit 69
   fi
-  gcloud auth configure-docker "$registry" --quiet
+  gcloud auth print-access-token \
+    | "${DOCKER[@]}" login -u oauth2accesstoken --password-stdin "$registry" >/dev/null
 fi
 
 "${COMPOSE[@]}" pull odoo
