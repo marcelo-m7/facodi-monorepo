@@ -12,6 +12,7 @@ RUNTIME_SA="$(service_account_email "$GCP_RUNTIME_SERVICE_ACCOUNT")"
 PROJECT_NUMBER="$(project_number)"
 POOL_RESOURCE="projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/${GCP_WIF_POOL}"
 REPOSITORY_PRINCIPAL="principalSet://iam.googleapis.com/${POOL_RESOURCE}/attribute.repository/${GITHUB_REPOSITORY}"
+WIF_CONDITION="assertion.repository == '${GITHUB_REPOSITORY}' && (assertion.ref == 'refs/heads/main' || assertion.ref == 'refs/heads/staging')"
 
 ensure_service_account() {
   local account_id="$1"
@@ -56,8 +57,8 @@ if resource_exists gcloud iam workload-identity-pools providers describe "$GCP_W
     --project "$GCP_PROJECT_ID" --location global --workload-identity-pool "$GCP_WIF_POOL" \
     --format='value(attributeCondition)')"
   [[ "$issuer" == "https://token.actions.githubusercontent.com" ]] || die "existing WIF provider uses unexpected issuer: $issuer"
-  [[ "$condition" == "assertion.repository == '${GITHUB_REPOSITORY}'" ]] || die "existing WIF provider has unexpected attribute condition: $condition"
-  log "Workload Identity Provider already exists and matches repository restriction"
+  [[ "$condition" == "$WIF_CONDITION" ]] || die "existing WIF provider has unexpected attribute condition: $condition"
+  log "Workload Identity Provider already exists and matches repository/branch restriction"
 else
   log "creating Workload Identity Provider: $GCP_WIF_PROVIDER"
   gcloud iam workload-identity-pools providers create-oidc "$GCP_WIF_PROVIDER" \
@@ -66,8 +67,8 @@ else
     --workload-identity-pool "$GCP_WIF_POOL" \
     --display-name "FACODI monorepo" \
     --issuer-uri "https://token.actions.githubusercontent.com" \
-    --attribute-mapping "google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner" \
-    --attribute-condition "assertion.repository == '${GITHUB_REPOSITORY}'" \
+    --attribute-mapping "google.subject=assertion.sub,attribute.actor=assertion.actor,attribute.repository=assertion.repository,attribute.repository_owner=assertion.repository_owner,attribute.ref=assertion.ref" \
+    --attribute-condition "$WIF_CONDITION" \
     --quiet
 fi
 
