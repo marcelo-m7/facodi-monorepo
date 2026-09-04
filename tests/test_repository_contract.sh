@@ -43,4 +43,6 @@ if grep -R -nE --exclude='validate-repository.sh' 'service[_-]?account.*\.json|G
   fail "long-lived Google service-account JSON credentials must not be referenced"
 fi
 
+bash scripts/validate-repository.sh
+
 echo "repository contract passed"
