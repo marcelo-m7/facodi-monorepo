@@ -1,0 +1,9 @@
+[options]
+addons_path = /usr/lib/python3/dist-packages/odoo/addons,/mnt/extra-addons
+proxy_mode = True
+workers = 2
+max_cron_threads = 1
+gevent_port = 8072
+
+; Database credentials are injected by the official Odoo Docker image
+; through HOST, PORT, USER and PASSWORD environment variables.
