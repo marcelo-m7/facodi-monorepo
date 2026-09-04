@@ -74,18 +74,25 @@ docker/
   Dockerfile                Odoo 19 image with discovered modules baked in
 infrastructure/
   docker-compose.yml        persistent Odoo/PostgreSQL runtime
+  gcp/
+    bootstrap-staging.sh    one-time GCP staging orchestration
+    configure-wif.sh        GitHub OIDC/WIF + service-account IAM
+    create-vm.sh            dual-stack VM, firewall and static IPv4
+    validate-staging.sh     cloud validation + GitHub variable output
+    vm-startup.sh           Docker/gcloud VM preparation
 scripts/
   build-image.sh            build/push one immutable image
   deploy-image.sh           deploy a supplied image URI on a VM
   healthcheck.sh            HTTP readiness verification
   validate-repository.sh    architecture safety checks
 .github/workflows/
-  ci.yml                    contract, Compose, image build and clean install
+  ci.yml                    contract, GCP bootstrap contract, Compose, image build and clean install
   build-image.yml           reusable WIF + Artifact Registry build
-  deploy-staging.yml        staging image build + Compute Engine deploy
+  deploy-staging.yml        staging image build + IAP/Compute Engine deploy
   deploy-production.yml     production image build + Compute Engine deploy
 docs/
-  ci-cd.md                  Google Cloud and GitHub setup
+  ci-cd.md                  GitHub and image delivery model
+  gcp-staging.md            one-time staging provisioning/operator guide
   architecture.md
   deployment.md
 ```
@@ -112,6 +119,29 @@ docker compose --env-file .env -f infrastructure/docker-compose.yml up -d
 
 Odoo is bound to `127.0.0.1:8069` by default. Put a reverse proxy in front of it for public HTTP/HTTPS access.
 
+## Bootstrap Google Cloud staging
+
+The repository includes an idempotent `gcloud` bootstrap for the first staging environment. It expects the FACODI VPC/subnet to exist already and validates that the subnet is dual-stack with external IPv6.
+
+Run it from an authenticated operator machine:
+
+```bash
+gcloud auth login
+GCP_PROJECT_ID=YOUR_PROJECT_ID \
+  bash infrastructure/gcp/bootstrap-staging.sh
+```
+
+Then validate and obtain the exact GitHub variable values:
+
+```bash
+GCP_PROJECT_ID=YOUR_PROJECT_ID \
+  bash infrastructure/gcp/validate-staging.sh
+```
+
+The bootstrap creates no service-account JSON key and no Odoo/PostgreSQL password. Keep `DEPLOY_STAGING_ENABLED=false` until `/opt/facodi/.env` exists on the VM and validation succeeds.
+
+See [`docs/gcp-staging.md`](docs/gcp-staging.md) for the complete staging setup.
+
 ## CI
 
 Pull requests run:
@@ -119,13 +149,14 @@ Pull requests run:
 ```text
 checkout recursive submodules
        -> repository contract
+       -> GCP bootstrap contract
        -> Compose validation
        -> immutable Docker build
        -> PostgreSQL startup
        -> clean installation of discovered Odoo modules
 ```
 
-The integration test therefore validates the exact addon commits pinned by the monorepo, not placeholders or mocks.
+The integration test therefore validates the exact addon commits pinned by the monorepo, not placeholders or mocks. The GCP bootstrap contract is static/syntax validation and does not require cloud credentials.
 
 ## CD
 
@@ -142,8 +173,8 @@ When deployment is enabled, the corresponding workflow:
 2. authenticates to Google Cloud using GitHub OIDC/WIF;
 3. builds the Odoo image;
 4. pushes it to Artifact Registry tagged with the exact Git SHA;
-5. copies only the runtime Compose/deployment scripts to Compute Engine;
-6. tells the VM to pull that exact image;
+5. connects to staging through IAP and copies only the runtime Compose/deployment scripts;
+6. tells the VM to pull that exact image using the VM runtime identity;
 7. installs missing FACODI modules or upgrades already-installed ones;
 8. starts Odoo and runs a health check.
 
@@ -182,7 +213,7 @@ PRODUCTION_DEPLOY_PATH
 
 Keep both deploy enable flags `false` until Artifact Registry, Workload Identity Federation, the Compute Engine VM and its `.env` file are configured.
 
-See [`docs/ci-cd.md`](docs/ci-cd.md) for the full Google Cloud setup and operational model.
+See [`docs/ci-cd.md`](docs/ci-cd.md) for the image delivery model and [`docs/gcp-staging.md`](docs/gcp-staging.md) for the staging infrastructure bootstrap.
 
 ## Runtime persistence
 

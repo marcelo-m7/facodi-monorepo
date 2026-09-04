@@ -54,8 +54,9 @@ jobs:
           gcloud compute ssh "$VM_NAME" \
             --project "$PROJECT_ID" \
             --zone "$VM_ZONE" \
+            --tunnel-through-iap \
             --quiet \
-            --command "mkdir -p '$DEPLOY_PATH/infrastructure' '$DEPLOY_PATH/scripts'"
+            --command "sudo mkdir -p '$DEPLOY_PATH/infrastructure' '$DEPLOY_PATH/scripts' && sudo chown -R \$(id -un):\$(id -gn) '$DEPLOY_PATH/infrastructure' '$DEPLOY_PATH/scripts'"
 
       - name: Copy runtime definition to VM
         env:
@@ -66,10 +67,10 @@ jobs:
         run: |
           gcloud compute scp infrastructure/docker-compose.yml \
             "$VM_NAME:$DEPLOY_PATH/infrastructure/docker-compose.yml" \
-            --project "$PROJECT_ID" --zone "$VM_ZONE" --quiet
+            --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap --quiet
           gcloud compute scp scripts/deploy-image.sh scripts/healthcheck.sh \
             "$VM_NAME:$DEPLOY_PATH/scripts/" \
-            --project "$PROJECT_ID" --zone "$VM_ZONE" --quiet
+            --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap --quiet
 
       - name: Deploy immutable image
         env:
@@ -82,5 +83,6 @@ jobs:
           gcloud compute ssh "$VM_NAME" \
             --project "$PROJECT_ID" \
             --zone "$VM_ZONE" \
+            --tunnel-through-iap \
             --quiet \
-            --command "cd '$DEPLOY_PATH' && chmod +x scripts/deploy-image.sh scripts/healthcheck.sh && bash scripts/deploy-image.sh '$IMAGE_URI'"
+            --command "cd '$DEPLOY_PATH' && sudo -n bash scripts/deploy-image.sh '$IMAGE_URI'"
