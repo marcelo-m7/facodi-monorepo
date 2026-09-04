@@ -85,4 +85,4 @@ jobs:
             --zone "$VM_ZONE" \
             --tunnel-through-iap \
             --quiet \
-            --command "cd '$DEPLOY_PATH' && chmod +x scripts/deploy-image.sh scripts/healthcheck.sh && bash scripts/deploy-image.sh '$IMAGE_URI'"
+            --command "cd '$DEPLOY_PATH' && sudo -n bash scripts/deploy-image.sh '$IMAGE_URI'"
