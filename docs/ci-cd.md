@@ -103,7 +103,7 @@ DEPLOY_PRODUCTION_ENABLED=false
 
 Use the actual Google Cloud project ID and Workload Identity resource names created for the project.
 
-The bootstrap restricts the WIF provider to the exact GitHub repository `marcelo-m7/facodi-monorepo`. The deploy identity receives the permissions required to push Artifact Registry images and connect to the staging VM through IAP + OS Login. The VM has a separate runtime identity with Artifact Registry read access.
+The WIF provider is restricted to the exact GitHub repository `marcelo-m7/facodi-monorepo`. Artifact Registry access is scoped to the FACODI repository: the deploy identity is Writer and the VM runtime identity is Reader. The deploy identity also receives IAP Tunnel User and OS Admin Login, plus Service Account User on the VM runtime identity so OS Login can reach a VM with that service account attached.
 
 ## Compute Engine runtime identity
 
@@ -115,7 +115,7 @@ The VM uses its own `facodi-runtime` Google Cloud service account and pulls the 
 gcloud auth print-access-token
 ```
 
-and pipes that short-lived token to the Docker login command. This works whether Docker is directly available to the OS Login user or must be executed through passwordless sudo.
+and pipes that short-lived token to the Docker login command. Google Cloud CLI on a Compute Engine VM uses the attached service account through the metadata server by default.
 
 No Artifact Registry password or service-account JSON file is copied from GitHub to the VM.
 
@@ -176,7 +176,7 @@ FACODI_MODULES=facodi_learning,website_facodi
 
 `FACODI_IMAGE` is supplied by the deployment script for each release and does not need to be permanently pinned in `.env`.
 
-For staging, follow the generated-secret procedure in [`gcp-staging.md`](gcp-staging.md) and keep `/opt/facodi/.env` readable only by the deployment user.
+For staging, `/opt/facodi/.env` is root-owned with mode `0600`. The final deployment command runs `deploy-image.sh` through OS Login administrative `sudo`, so a GitHub service-account Unix identity does not need direct read access to the secret file. See [`gcp-staging.md`](gcp-staging.md).
 
 ## Deployment sequence
 
@@ -189,12 +189,13 @@ For `staging` and `main`, when the respective deployment flag is enabled:
 5. The image is pushed to Artifact Registry under `${GITHUB_SHA}`.
 6. The deploy job authenticates to Google Cloud using WIF again.
 7. For staging, GitHub opens IAP SSH/SCP tunnels and copies only `docker-compose.yml`, `deploy-image.sh` and `healthcheck.sh` to the VM.
-8. The VM obtains a short-lived Google access token from its own runtime identity and authenticates Docker to Artifact Registry.
-9. The VM pulls the exact SHA-tagged image.
-10. PostgreSQL is started.
-11. Missing FACODI modules are installed and already-installed FACODI modules are upgraded.
-12. Odoo is started from the immutable image.
-13. The HTTP health check must pass.
+8. The final staging deployment script runs under OS Login administrative `sudo` so it can read the root-owned `.env`.
+9. The VM obtains a short-lived Google access token from its own runtime identity and authenticates Docker to Artifact Registry.
+10. The VM pulls the exact SHA-tagged image.
+11. PostgreSQL is started.
+12. Missing FACODI modules are installed and already-installed FACODI modules are upgraded.
+13. Odoo is started from the immutable image.
+14. The HTTP health check must pass.
 
 The VM does not need a clone of `facodi-monorepo` for application source code.
 
@@ -217,10 +218,10 @@ The monorepo CI then installs the exact pinned modules together on a clean Odoo 
 
 ## Rollback
 
-Rollback does not require source changes on the VM. Redeploy a previously known Artifact Registry image URI:
+Rollback does not require source changes on the VM. Redeploy a previously known Artifact Registry image URI from an administrative session:
 
 ```bash
-bash scripts/deploy-image.sh \
+sudo -n bash scripts/deploy-image.sh \
   europe-southwest1-docker.pkg.dev/<project>/facodi/odoo:<previous-monorepo-sha>
 ```
 
