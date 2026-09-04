@@ -4,7 +4,7 @@
 
 Provision the first reproducible Google Cloud staging environment for FACODI without storing long-lived Google credentials in GitHub and without cloning application source code on the runtime VM.
 
-The existing immutable-image delivery model remains unchanged: GitHub Actions resolves the pinned addon submodules, builds one Odoo 19 image, pushes it to Artifact Registry, and deploys that exact SHA-tagged image to Compute Engine.
+The immutable-image delivery model remains unchanged: GitHub Actions resolves the pinned addon submodules, builds one Odoo 19 image, pushes it to Artifact Registry, and deploys that exact SHA-tagged image to Compute Engine.
 
 ## Scope
 
@@ -14,8 +14,8 @@ It covers:
 
 - Google APIs required by the deployment path;
 - Artifact Registry Docker repository;
-- GitHub Workload Identity Federation and the deploy service account;
-- VM runtime service account;
+- GitHub Workload Identity Federation and a dedicated deploy service account;
+- a separate VM runtime service account;
 - a dual-stack Compute Engine VM attached to the existing FACODI VPC/subnet;
 - public HTTP/HTTPS firewall rules for IPv4 and IPv6;
 - SSH restricted to IAP TCP forwarding;
@@ -52,13 +52,18 @@ The bootstrap defaults to:
 - deploy service account: `facodi-github-deploy`;
 - runtime service account: `facodi-runtime`.
 
-All defaults are overridable by environment variables. `GCP_PROJECT_ID` is mandatory and is never inferred from a secret file.
+All defaults are overridable by environment variables. `GCP_PROJECT_ID` is mandatory for actual provisioning and is never inferred from a secret file.
 
 ## Network model
 
-The bootstrap expects an existing dual-stack subnet. It validates that the subnet exists and is attached to the configured VPC before creating the VM.
+The bootstrap expects an existing dual-stack subnet. It validates that the subnet exists, belongs to the configured VPC, has `IPV4_IPV6` stack type, and uses external IPv6 before creating the VM.
 
-The VM NIC is created with `IPV4_IPV6`. The VM receives a public external IPv4 address and an external IPv6 address from the subnet. The first implementation does not reserve a static IPv6 range automatically; DNS cutover remains a separate operation after validation. A static IPv4 address may be reserved by the bootstrap so that the staging A record is stable.
+The VM NIC is created with `IPV4_IPV6`. The VM receives:
+
+- one reserved regional external IPv4 address, used to keep the staging A record stable later;
+- one external IPv6 address allocated by Compute Engine from the subnet.
+
+The first implementation does not reserve a custom static external IPv6 `/96`; DNS cutover remains a separate operation after cloud validation.
 
 Ingress policy:
 
@@ -78,20 +83,21 @@ The provider maps GitHub OIDC claims including `assertion.repository` and restri
 
 The WIF principal set receives `roles/iam.workloadIdentityUser` on the deploy service account.
 
-The deploy service account receives only the project roles needed by the current pipeline:
+The deploy service account receives:
 
-- `roles/artifactregistry.writer` to push immutable images;
-- `roles/iap.tunnelResourceAccessor` to open IAP SSH tunnels;
-- `roles/compute.osAdminLogin` for OS Login administrative access;
-- `roles/compute.viewer` for the instance/project reads required by `gcloud compute ssh/scp`.
+- `roles/artifactregistry.writer` **on the FACODI Artifact Registry repository only**;
+- `roles/iap.tunnelResourceAccessor` on the project for IAP TCP forwarding;
+- `roles/compute.osAdminLogin` on the project for OS Login administrative access.
 
-Because the target VM has a runtime service account, the deploy identity also receives `roles/iam.serviceAccountUser` on the runtime service account.
+`roles/compute.osAdminLogin` already contains the Compute instance/project read permissions required for `gcloud compute ssh/scp`, so a broad `roles/compute.viewer` grant is intentionally avoided.
+
+Because the target VM has a runtime service account, the deploy identity receives `roles/iam.serviceAccountUser` on that runtime service account, as required for OS Login access to a VM with an attached service account.
 
 ### VM runtime identity
 
 `facodi-runtime@PROJECT_ID.iam.gserviceaccount.com` is attached to the Compute Engine VM and receives:
 
-- `roles/artifactregistry.reader` so the VM can pull the immutable image.
+- `roles/artifactregistry.reader` **on the FACODI Artifact Registry repository only** so the VM can pull the immutable image.
 
 No long-lived service-account key is created.
 
@@ -101,12 +107,13 @@ The Compute Engine VM uses Debian 12 and enables OS Login through instance metad
 
 The startup script:
 
-1. installs Docker Engine prerequisites and Google Cloud CLI using package repositories available to Debian;
-2. enables and starts Docker;
-3. ensures Docker Compose is available through the Docker CLI plugin/package available on the image;
+1. installs Docker Engine and Docker Compose when absent;
+2. installs Google Cloud CLI when absent;
+3. enables and starts Docker;
 4. creates `/opt/facodi/infrastructure` and `/opt/facodi/scripts`;
-5. creates a `facodi-deploy` local group and grants the OS Login deployment user a path that can execute Docker through sudo rather than making application files world-writable;
-6. leaves `/opt/facodi/.env` absent so secrets must be created explicitly before enabling deployment.
+5. leaves `/opt/facodi/.env` absent so secrets must be created explicitly before enabling deployment.
+
+The deploy workflow logs in through OS Login with administrative access and uses passwordless `sudo` for Docker when direct Docker access is unavailable. It does not create or depend on a permanent local deployment account or Docker group membership.
 
 The startup script never clones Git repositories and never embeds Odoo/PostgreSQL credentials.
 
@@ -118,9 +125,15 @@ The primary entrypoint is:
 GCP_PROJECT_ID=my-project bash infrastructure/gcp/bootstrap-staging.sh
 ```
 
+Help is available without Google credentials or a project ID:
+
+```bash
+bash infrastructure/gcp/bootstrap-staging.sh --help
+```
+
 Optional overrides use environment variables such as `GCP_REGION`, `GCP_ZONE`, `GCP_NETWORK`, `GCP_SUBNET`, `STAGING_VM_NAME`, `GCP_MACHINE_TYPE`, `GCP_BOOT_DISK_SIZE`, `GITHUB_REPOSITORY`, `GCP_ARTIFACT_REPOSITORY`, and `FACODI_IMAGE_NAME`.
 
-The bootstrap is idempotent: it describes each resource before attempting creation and treats an existing compatible resource as success. It fails rather than silently replacing incompatible network resources or VM configuration.
+The bootstrap is idempotent by construction: it describes each resource before attempting creation and treats an existing compatible resource as success. It fails rather than intentionally replacing existing network resources.
 
 ## Validation contract
 
@@ -134,6 +147,7 @@ The bootstrap is idempotent: it describes each resource before attempting creati
 - configured VPC and subnet exist;
 - VM exists in the expected zone and uses the configured subnet;
 - VM stack type is dual-stack;
+- VM has external IPv4 and IPv6;
 - runtime service account is attached;
 - IAP SSH firewall rule and HTTP/HTTPS rules exist.
 
@@ -153,6 +167,12 @@ STAGING_DEPLOY_PATH
 
 `DEPLOY_STAGING_ENABLED` remains `false` until the operator creates `/opt/facodi/.env` and explicitly enables deployment.
 
+## Runtime image authentication
+
+The VM authenticates to Artifact Registry with its attached runtime service account. `scripts/deploy-image.sh` obtains a short-lived access token using `gcloud auth print-access-token` and passes it to `docker login` through stdin.
+
+No Artifact Registry password or Docker credential is stored in GitHub.
+
 ## Safety constraints
 
 - no service-account JSON keys;
@@ -162,14 +182,15 @@ STAGING_DEPLOY_PATH
 - no public Odoo or PostgreSQL ports;
 - no automatic production changes;
 - no automatic deletion or recreation of existing VPC/subnet resources;
-- bootstrap exits on mismatched critical resource configuration instead of mutating it destructively.
+- bootstrap exits on critical incompatible network configuration instead of mutating it destructively;
+- Artifact Registry read/write roles are repository-scoped rather than project-wide.
 
 ## Success criteria
 
 The implementation is complete when:
 
 1. repository tests validate the bootstrap contract and shell syntax;
-2. the bootstrap scripts are idempotent by construction and support `--help`/environment-driven configuration;
+2. the primary bootstrap supports `--help` and environment-driven configuration;
 3. the staging deploy workflow uses IAP for SSH/SCP;
 4. documentation explains the one-time local `gcloud` bootstrap and the remaining manual secret step;
 5. GitHub CI passes without requiring Google Cloud credentials;
