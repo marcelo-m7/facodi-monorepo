@@ -9,28 +9,47 @@ permissions:
   contents: read
 
 jobs:
-  addon-install:
+  validate-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       POSTGRES_USER: odoo
       POSTGRES_PASSWORD: ci-password
       ODOO_DB: facodi_ci
       ODOO_ADMIN_PASSWD: ci-admin-password
       ODOO_WORKERS: 0
+      FACODI_IMAGE: facodi-odoo:ci
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Repository contract
+        run: bash tests/test_repository_contract.sh
+
       - name: Validate Compose configuration
-        run: docker compose -f infrastructure/docker-compose.yml config --quiet
+        run: docker compose --env-file .env.example -f infrastructure/docker-compose.yml config --quiet
+
+      - name: Build immutable Odoo image
+        run: docker build --pull -f docker/Dockerfile -t "$FACODI_IMAGE" .
+
       - name: Start PostgreSQL
         run: docker compose -f infrastructure/docker-compose.yml up -d db
-      - name: Install FACODI Core on a clean database
+
+      - name: Install discovered FACODI modules on a clean database
         run: |
+          modules="$(find addons -type f -name __manifest__.py -printf '%h\n' | xargs -r -n1 basename | sort -u | paste -sd, -)"
+          if [[ -z "$modules" ]]; then
+            echo "No Odoo modules present yet; submodule placeholders are allowed."
+            exit 0
+          fi
+          echo "Installing modules: $modules"
           docker compose -f infrastructure/docker-compose.yml run --rm odoo \
             --stop-after-init \
             --without-demo=all \
             -d "$ODOO_DB" \
-            -i facodi_core
+            -i "$modules"
+
       - name: Show service logs on failure
         if: failure()
         run: docker compose -f infrastructure/docker-compose.yml logs --no-color
