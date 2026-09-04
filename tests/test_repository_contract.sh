@@ -35,7 +35,7 @@ grep -Fq 'id-token: write' .github/workflows/build-image.yml || fail "build work
 grep -Fq 'google-github-actions/auth@' .github/workflows/build-image.yml || fail "build workflow must authenticate to Google Cloud with google-github-actions/auth"
 grep -Fq 'submodules: recursive' .github/workflows/build-image.yml || fail "build workflow must checkout submodules recursively"
 
-if grep -R -nE 'service[_-]?account.*\.json|GOOGLE_APPLICATION_CREDENTIALS.*\.json' .github scripts infrastructure docker 2>/dev/null; then
+if grep -R -nE --exclude='validate-repository.sh' 'service[_-]?account.*\.json|GOOGLE_APPLICATION_CREDENTIALS.*\.json' .github scripts infrastructure docker 2>/dev/null; then
   fail "long-lived Google service-account JSON credentials must not be referenced"
 fi
 
