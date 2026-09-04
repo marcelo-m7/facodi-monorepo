@@ -28,6 +28,7 @@ grep -q 'ensure_artifact_repository_role' infrastructure/gcp/configure-wif.sh
 grep -q 'roles/artifactregistry.writer' infrastructure/gcp/configure-wif.sh
 grep -q 'roles/artifactregistry.reader' infrastructure/gcp/configure-wif.sh
 grep -q -- '--tunnel-through-iap' .github/workflows/deploy-staging.yml
+grep -q 'sudo -n bash scripts/deploy-image.sh' .github/workflows/deploy-staging.yml
 grep -q 'gcloud auth print-access-token' scripts/deploy-image.sh
 
 if grep -q 'ensure_project_role .*roles/artifactregistry' infrastructure/gcp/configure-wif.sh; then
