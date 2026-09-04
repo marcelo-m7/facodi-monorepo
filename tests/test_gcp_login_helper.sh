@@ -10,6 +10,10 @@ SCRIPT="scripts/gcp-login.sh"
   echo "missing Google Cloud login helper: $SCRIPT" >&2
   exit 1
 }
+[[ -x "$SCRIPT" ]] || {
+  echo "Google Cloud login helper must be executable: $SCRIPT" >&2
+  exit 1
+}
 
 bash -n "$SCRIPT"
 grep -qxF '.env' .gitignore
