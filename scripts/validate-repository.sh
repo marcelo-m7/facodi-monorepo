@@ -11,10 +11,20 @@ fail() {
 
 [[ -f docker/Dockerfile ]] || fail "docker/Dockerfile is missing"
 grep -Eq '^FROM[[:space:]]+odoo:19\.0([[:space:]]|$)' docker/Dockerfile || fail "Dockerfile must use odoo:19.0"
-grep -Fq 'COPY addons/ /mnt/extra-addons/' docker/Dockerfile || fail "addons must be baked into the image"
+grep -Fq 'COPY addons/ /opt/facodi-addon-sources/' docker/Dockerfile || fail "Dockerfile must copy checked-out addon repositories into the image build"
+grep -Fq '/mnt/extra-addons' docker/Dockerfile || fail "Dockerfile must expose discovered Odoo modules through /mnt/extra-addons"
 
-[[ -f addons/facodi-learning/README.md || -f .gitmodules ]] || fail "facodi-learning placeholder/submodule missing"
-[[ -f addons/facodi-theme/README.md || -f .gitmodules ]] || fail "facodi-theme placeholder/submodule missing"
+[[ -f .gitmodules ]] || fail ".gitmodules is missing"
+[[ "$(git config -f .gitmodules --get submodule.addons/facodi-learning.url || true)" == "https://github.com/marcelo-m7/facodi-learning.git" ]] || fail "facodi-learning submodule URL is incorrect"
+[[ "$(git config -f .gitmodules --get submodule.addons/facodi-theme.url || true)" == "https://github.com/marcelo-m7/facodi-theme.git" ]] || fail "facodi-theme submodule URL is incorrect"
+
+git ls-files --stage addons/facodi-learning | grep -Eq '^160000 ' || fail "addons/facodi-learning is not a Gitlink"
+git ls-files --stage addons/facodi-theme | grep -Eq '^160000 ' || fail "addons/facodi-theme is not a Gitlink"
+
+[[ -f addons/facodi-learning/facodi_learning/__manifest__.py ]] || fail "facodi_learning manifest is missing"
+[[ -f addons/facodi-theme/website_facodi/__manifest__.py ]] || fail "website_facodi manifest is missing"
+
+grep -Fq 'FACODI_MODULES=facodi_learning,website_facodi' .env.example || fail "runtime module list does not match checked-out addons"
 
 [[ -f scripts/deploy-image.sh ]] || fail "scripts/deploy-image.sh is missing"
 if grep -Eq 'git[[:space:]]+(pull|fetch|checkout|clone)' scripts/deploy-image.sh; then
@@ -24,6 +34,7 @@ fi
 [[ -f .github/workflows/build-image.yml ]] || fail "build-image workflow missing"
 grep -Fq 'id-token: write' .github/workflows/build-image.yml || fail "build workflow lacks OIDC permission"
 grep -Fq 'google-github-actions/auth@' .github/workflows/build-image.yml || fail "build workflow lacks Google WIF auth"
+grep -Fq 'submodules: recursive' .github/workflows/build-image.yml || fail "build workflow must checkout submodules recursively"
 
 grep -Fq 'FACODI_IMAGE' infrastructure/docker-compose.yml || fail "Compose must reference FACODI_IMAGE"
 if grep -Fq '../addons:/mnt/extra-addons' infrastructure/docker-compose.yml; then
