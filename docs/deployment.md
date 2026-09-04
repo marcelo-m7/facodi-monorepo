@@ -20,7 +20,7 @@ sudo chown -R "$USER":"$USER" /opt/facodi
 cd /opt/facodi
 ```
 
-Copie `.env.example` como referência, crie `/opt/facodi/.env` manualmente e substitua obrigatoriamente as palavras-passe de exemplo.
+Crie `/opt/facodi/.env` manualmente a partir de `.env.example` e substitua obrigatoriamente as palavras-passe de exemplo.
 
 Valores essenciais:
 
@@ -29,7 +29,7 @@ POSTGRES_USER=odoo
 POSTGRES_PASSWORD=<strong-secret>
 ODOO_DB=facodi
 ODOO_ADMIN_PASSWD=<strong-secret>
-FACODI_MODULES=facodi_learning,facodi_theme
+FACODI_MODULES=facodi_learning,website_facodi
 ```
 
 ## 2. Identidade da VM
@@ -59,7 +59,7 @@ O script:
 1. autentica Docker no Artifact Registry;
 2. faz pull apenas da imagem Odoo indicada;
 3. sobe PostgreSQL;
-4. deteta, para `facodi_learning` e `facodi_theme`, se cada módulo deve ser instalado ou atualizado;
+4. deteta, para `facodi_learning` e `website_facodi`, se cada módulo deve ser instalado ou atualizado;
 5. executa a inicialização/upgrade Odoo com `--stop-after-init`;
 6. sobe o serviço Odoo;
 7. valida `/web/login` com o health check.
@@ -75,7 +75,7 @@ O reverse proxy deve terminar TLS em 443 e encaminhar `/websocket` para 8072 e o
 
 ## 5. GitHub Actions e Workload Identity Federation
 
-Configure as variáveis comuns:
+Configure como **Repository Actions variables**:
 
 ```text
 GCP_PROJECT_ID
@@ -84,6 +84,8 @@ GCP_ARTIFACT_REPOSITORY
 FACODI_IMAGE_NAME
 GCP_WORKLOAD_IDENTITY_PROVIDER
 GCP_GITHUB_SERVICE_ACCOUNT
+DEPLOY_STAGING_ENABLED=false
+DEPLOY_PRODUCTION_ENABLED=false
 ```
 
 A service account usada pelo GitHub deve ser federada ao repositório através de Workload Identity Federation e possuir apenas as permissões necessárias para publicar no Artifact Registry e operar o acesso de deployment à VM.
@@ -93,7 +95,6 @@ Não configure um secret contendo service-account JSON.
 ### Staging environment
 
 ```text
-DEPLOY_STAGING_ENABLED=false
 STAGING_VM_NAME
 STAGING_VM_ZONE
 STAGING_DEPLOY_PATH=/opt/facodi
@@ -102,13 +103,12 @@ STAGING_DEPLOY_PATH=/opt/facodi
 ### Production environment
 
 ```text
-DEPLOY_PRODUCTION_ENABLED=false
 PRODUCTION_VM_NAME
 PRODUCTION_VM_ZONE
 PRODUCTION_DEPLOY_PATH=/opt/facodi
 ```
 
-Ative cada flag de deployment apenas quando o ambiente correspondente estiver pronto.
+Ative cada variável `DEPLOY_*_ENABLED` apenas quando o ambiente correspondente estiver pronto.
 
 ## 6. Fluxo de branches
 
