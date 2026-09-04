@@ -11,14 +11,18 @@ fail() {
 
 [[ -f docker/Dockerfile ]] || fail "docker/Dockerfile is required"
 grep -Eq '^FROM[[:space:]]+odoo:19\.0([[:space:]]|$)' docker/Dockerfile || fail "Dockerfile must derive from odoo:19.0"
-grep -Fq 'COPY addons/ /mnt/extra-addons/' docker/Dockerfile || fail "Dockerfile must bake addons into /mnt/extra-addons"
 
-[[ -f addons/facodi-learning/README.md || -f .gitmodules ]] || fail "facodi-learning placeholder or submodule is required"
-[[ -f addons/facodi-theme/README.md || -f .gitmodules ]] || fail "facodi-theme placeholder or submodule is required"
+[[ -f .gitmodules ]] || fail ".gitmodules is required once addon repositories exist"
+[[ "$(git config -f .gitmodules --get submodule.addons/facodi-learning.url || true)" == "https://github.com/marcelo-m7/facodi-learning.git" ]] || fail "facodi-learning submodule URL is incorrect"
+[[ "$(git config -f .gitmodules --get submodule.addons/facodi-theme.url || true)" == "https://github.com/marcelo-m7/facodi-theme.git" ]] || fail "facodi-theme submodule URL is incorrect"
 
-[[ -f scripts/attach-submodules.sh ]] || fail "attach-submodules.sh is required"
-grep -Fq 'marcelo-m7/facodi-learning.git' scripts/attach-submodules.sh || fail "learning repository URL missing"
-grep -Fq 'marcelo-m7/facodi-theme.git' scripts/attach-submodules.sh || fail "theme repository URL missing"
+git ls-files --stage addons/facodi-learning | grep -Eq '^160000 ' || fail "addons/facodi-learning must be a Git submodule"
+git ls-files --stage addons/facodi-theme | grep -Eq '^160000 ' || fail "addons/facodi-theme must be a Git submodule"
+
+[[ -f addons/facodi-learning/facodi_learning/__manifest__.py ]] || fail "facodi_learning manifest is missing from learning submodule"
+[[ -f addons/facodi-theme/website_facodi/__manifest__.py ]] || fail "website_facodi manifest is missing from theme submodule"
+
+grep -Fq 'FACODI_MODULES=facodi_learning,website_facodi' .env.example || fail "runtime module list must match the actual Odoo technical module names"
 
 [[ -f scripts/deploy-image.sh ]] || fail "deploy-image.sh is required"
 if grep -Eq 'git[[:space:]]+(pull|fetch|checkout|clone)' scripts/deploy-image.sh; then
@@ -38,5 +42,7 @@ grep -Fq 'submodules: recursive' .github/workflows/build-image.yml || fail "buil
 if grep -R -nE --exclude='validate-repository.sh' 'service[_-]?account.*\.json|GOOGLE_APPLICATION_CREDENTIALS.*\.json' .github scripts infrastructure docker 2>/dev/null; then
   fail "long-lived Google service-account JSON credentials must not be referenced"
 fi
+
+bash scripts/validate-repository.sh
 
 echo "repository contract passed"

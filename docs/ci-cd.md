@@ -4,10 +4,10 @@
 
 `facodi-monorepo` is the composition and deployment repository for the FACODI Odoo runtime. It does not own the implementation of the feature addons.
 
-The intended addon repositories are:
+The active addon repositories are:
 
 - `https://github.com/marcelo-m7/facodi-learning.git` -> technical Odoo module `facodi_learning`
-- `https://github.com/marcelo-m7/facodi-theme.git` -> technical Odoo module `facodi_theme`
+- `https://github.com/marcelo-m7/facodi-theme.git` -> technical Odoo module `website_facodi`
 
 They are consumed as pinned Git submodules under `addons/`.
 
@@ -35,6 +35,8 @@ ${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}/${FACO
 
 The container never executes `git clone`, `git fetch`, `git checkout` or `git pull`.
 
+The Docker build copies the checked-out addon repositories to a build-only source directory, discovers immediate Odoo module directories containing `__manifest__.py`, and copies those modules to `/mnt/extra-addons`. This allows each addon repository to keep repository-level documentation, workflows and other files outside the technical Odoo module directory.
+
 ## GitHub authentication to Google Cloud
 
 GitHub Actions uses OpenID Connect and Google Workload Identity Federation. Do not create or upload a long-lived service-account JSON key.
@@ -48,6 +50,8 @@ GCP_ARTIFACT_REPOSITORY
 FACODI_IMAGE_NAME
 GCP_WORKLOAD_IDENTITY_PROVIDER
 GCP_GITHUB_SERVICE_ACCOUNT
+DEPLOY_STAGING_ENABLED
+DEPLOY_PRODUCTION_ENABLED
 ```
 
 Recommended values for the current FACODI layout are conceptually:
@@ -56,6 +60,8 @@ Recommended values for the current FACODI layout are conceptually:
 GCP_REGION=europe-southwest1
 GCP_ARTIFACT_REPOSITORY=facodi
 FACODI_IMAGE_NAME=odoo
+DEPLOY_STAGING_ENABLED=false
+DEPLOY_PRODUCTION_ENABLED=false
 ```
 
 Use the actual Google Cloud project ID and Workload Identity resource names created for the project.
@@ -80,7 +86,6 @@ No Artifact Registry password or service-account JSON file is copied from GitHub
 ### Staging environment
 
 ```text
-DEPLOY_STAGING_ENABLED=false
 STAGING_VM_NAME
 STAGING_VM_ZONE
 STAGING_DEPLOY_PATH
@@ -89,13 +94,12 @@ STAGING_DEPLOY_PATH
 ### Production environment
 
 ```text
-DEPLOY_PRODUCTION_ENABLED=false
 PRODUCTION_VM_NAME
 PRODUCTION_VM_ZONE
 PRODUCTION_DEPLOY_PATH
 ```
 
-Keep `DEPLOY_STAGING_ENABLED` and `DEPLOY_PRODUCTION_ENABLED` set to `false` until the VMs, WIF provider, Artifact Registry repository and `.env` files are ready.
+Keep the repository variables `DEPLOY_STAGING_ENABLED` and `DEPLOY_PRODUCTION_ENABLED` set to `false` until the VMs, WIF provider, Artifact Registry repository and `.env` files are ready.
 
 A typical deployment path is `/opt/facodi`.
 
@@ -109,7 +113,7 @@ Required runtime values include:
 POSTGRES_PASSWORD
 ODOO_ADMIN_PASSWD
 ODOO_DB
-FACODI_MODULES=facodi_learning,facodi_theme
+FACODI_MODULES=facodi_learning,website_facodi
 ```
 
 `FACODI_IMAGE` is supplied by the deployment script for each release and does not need to be permanently pinned in `.env`.
@@ -121,7 +125,7 @@ For `staging` and `main`, when the respective deployment flag is enabled:
 1. GitHub checks out the monorepo and all Git submodules recursively.
 2. Repository architecture validation runs.
 3. GitHub obtains a short-lived Google credential through Workload Identity Federation.
-4. Docker builds `docker/Dockerfile`.
+4. Docker discovers and bakes the technical Odoo modules from the pinned addon repositories into the image.
 5. The image is pushed to Artifact Registry under `${GITHUB_SHA}`.
 6. The deploy job authenticates to Google Cloud using WIF again.
 7. GitHub copies only `docker-compose.yml`, `deploy-image.sh` and `healthcheck.sh` to the VM.
@@ -134,21 +138,9 @@ For `staging` and `main`, when the respective deployment flag is enabled:
 
 The VM does not need a clone of `facodi-monorepo` for application source code.
 
-## Attaching the addon repositories
+## Updating addon versions
 
-While the two addon repositories do not exist, `addons/facodi-learning` and `addons/facodi-theme` contain explanatory placeholder README files.
-
-Once both repositories exist and are accessible:
-
-```bash
-bash scripts/attach-submodules.sh
-```
-
-The script verifies both remotes before modifying the repository, removes only the known placeholder directories, adds both submodules and initializes them recursively.
-
-After that, review and commit `.gitmodules` plus the two Gitlink entries.
-
-To move an addon to a newer release:
+The Gitlink entries in `facodi-monorepo` pin exact commits. To update an addon locally:
 
 ```bash
 cd addons/facodi-learning
@@ -159,7 +151,9 @@ git add addons/facodi-learning
 git commit -m "chore: update facodi-learning"
 ```
 
-The monorepo commit therefore records the exact addon version used by each Docker image.
+Use the equivalent flow for `addons/facodi-theme`. Prefer commits whose addon repository CI has completed successfully.
+
+The monorepo CI then installs the exact pinned modules together on a clean Odoo 19 database. This catches integration failures that may not appear when each addon is tested independently.
 
 ## Rollback
 
