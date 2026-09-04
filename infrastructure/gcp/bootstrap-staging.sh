@@ -1,6 +1,37 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
+  cat <<'EOF'
+Usage:
+  GCP_PROJECT_ID=PROJECT_ID bash infrastructure/gcp/bootstrap-staging.sh
+
+Required environment:
+  GCP_PROJECT_ID
+
+Common optional overrides:
+  GCP_REGION                 default: europe-southwest1
+  GCP_ZONE                   default: ${GCP_REGION}-b
+  GCP_NETWORK                default: facodi-vpc
+  GCP_SUBNET                 default: facodi-madrid
+  GCP_ARTIFACT_REPOSITORY    default: facodi
+  FACODI_IMAGE_NAME          default: odoo
+  STAGING_VM_NAME            default: facodi-app-01
+  STAGING_DEPLOY_PATH        default: /opt/facodi
+  GCP_MACHINE_TYPE           default: e2-standard-2
+  GCP_BOOT_DISK_SIZE         default: 30GB
+
+The script is designed to be re-run. It creates missing staging resources
+and refuses destructive replacement of the existing VPC/subnet.
+EOF
+  exit 0
+fi
+
+if (( $# > 0 )); then
+  echo "unexpected arguments; use --help" >&2
+  exit 64
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib.sh
 source "$SCRIPT_DIR/lib.sh"
@@ -46,7 +77,4 @@ fi
 
 bash "$SCRIPT_DIR/configure-wif.sh"
 bash "$SCRIPT_DIR/create-vm.sh"
-
-if [[ -f "$SCRIPT_DIR/validate-staging.sh" ]]; then
-  bash "$SCRIPT_DIR/validate-staging.sh"
-fi
+bash "$SCRIPT_DIR/validate-staging.sh"
