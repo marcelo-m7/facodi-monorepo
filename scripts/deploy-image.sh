@@ -22,7 +22,7 @@ set +a
 
 : "${ODOO_DB:?ODOO_DB must be set in .env}"
 : "${POSTGRES_USER:=odoo}"
-: "${FACODI_MODULES:=facodi_learning,facodi_theme}"
+: "${FACODI_MODULES:=facodi_learning,website_facodi}"
 
 for module in ${FACODI_MODULES//,/ }; do
   if [[ ! "$module" =~ ^[a-z0-9_]+$ ]]; then
