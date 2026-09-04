@@ -1,1 +1,0 @@
-# FACODI core addon package.

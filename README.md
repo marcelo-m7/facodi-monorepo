@@ -1,106 +1,186 @@
 # FACODI Odoo
 
-Infraestrutura e addons Odoo para o **FACODI — Faculdade Comunitária Digital**.
+Composition, build and deployment repository for **FACODI — Faculdade Comunitária Digital** on Odoo 19 Community.
 
-Este repositório mantém, numa única base versionada, o código dos addons FACODI e a configuração necessária para executar Odoo Community em infraestrutura própria no Google Cloud.
+This repository does **not** own the feature addons. It pins their exact Git commits, builds one immutable Odoo image and deploys that image to Google Compute Engine.
 
-## Arquitetura
+## Architecture
 
 ```text
-GitHub
-├── branch staging ───────────────► staging.facodi.pt
-└── branch main ──────────────────► facodi.pt
-                                      │
-                                      ▼
-                              Google Compute Engine
-                              ├── Docker Compose
-                              ├── Odoo 19 Community
-                              ├── PostgreSQL 16
-                              └── addons FACODI
+marcelo-m7/facodi-learning     marcelo-m7/facodi-theme
+          |                              |
+          +---------- Git submodules ----+
+                         |
+                         v
+              marcelo-m7/facodi-monorepo
+                         |
+                  GitHub Actions
+                         |
+          checkout submodules recursively
+                         |
+                 docker/Dockerfile
+                         |
+                         v
+              Google Artifact Registry
+          odoo:<facodi-monorepo-commit-sha>
+                         |
+                         v
+               Google Compute Engine
+                 Docker Compose
+                /              \
+        Odoo 19 image       PostgreSQL 16
+        persistent filestore persistent DB
 ```
 
-A VM é ligada à VPC dual-stack do projeto FACODI. Apenas HTTP/HTTPS devem ficar expostos publicamente; Odoo e PostgreSQL permanecem atrás do reverse proxy/rede interna.
+GitHub authenticates to Google Cloud with **OIDC + Workload Identity Federation**. Long-lived Google service-account JSON keys are not part of the design.
 
-## Estrutura
+The running Odoo container never performs `git pull`. Every deployed image contains the exact addon versions pinned by the monorepo commit.
+
+## Addon repositories
+
+The planned repositories are:
+
+- `marcelo-m7/facodi-learning` -> Odoo technical module `facodi_learning`
+- `marcelo-m7/facodi-theme` -> Odoo technical module `facodi_theme`
+
+Until these repositories exist, the matching directories under `addons/` contain only placeholder README files.
+
+Once both repositories exist:
+
+```bash
+bash scripts/attach-submodules.sh
+```
+
+That converts the two placeholder directories into real Git submodules and creates `.gitmodules`.
+
+## Repository structure
 
 ```text
 addons/
-  facodi_core/           núcleo inicial do addon Odoo
+  facodi-learning/          future Git submodule
+  facodi-theme/             future Git submodule
+docker/
+  Dockerfile                Odoo 19 image with addons baked in
 infrastructure/
-  docker-compose.yml    runtime local/VM
-  odoo.conf.example     configuração base de referência
+  docker-compose.yml        persistent Odoo/PostgreSQL runtime
 scripts/
-  deploy.sh             atualização segura da instância
-  healthcheck.sh        verificação HTTP
+  attach-submodules.sh      convert placeholders to Git submodules
+  build-image.sh            build/push one immutable image
+  deploy-image.sh           deploy a supplied image URI on a VM
+  healthcheck.sh            HTTP readiness verification
+  validate-repository.sh    architecture safety checks
 .github/workflows/
-  ci.yml                instalação limpa do addon em CI
-  deploy-staging.yml    deploy da branch staging
-  deploy-production.yml deploy da branch main
+  ci.yml                    contract, Compose and Docker validation
+  build-image.yml           reusable WIF + Artifact Registry build
+  deploy-staging.yml        staging image build + Compute Engine deploy
+  deploy-production.yml     production image build + Compute Engine deploy
 docs/
+  ci-cd.md                  Google Cloud and GitHub setup
   architecture.md
   deployment.md
 ```
 
-## Desenvolvimento local
+## Local image build
 
-1. Copie `.env.example` para `.env`.
-2. Defina pelo menos `POSTGRES_PASSWORD`, `ODOO_ADMIN_PASSWD` e `ODOO_DB`.
-3. Execute:
+Copy the runtime configuration:
 
 ```bash
-docker compose -f infrastructure/docker-compose.yml up -d
+cp .env.example .env
 ```
 
-Odoo fica disponível em `http://localhost:8069`.
-
-Para uma instalação nova do addon:
+Build the same image structure used by CI:
 
 ```bash
-docker compose -f infrastructure/docker-compose.yml exec -T odoo \
-  odoo -d "$ODOO_DB" -i facodi_core --stop-after-init
+bash scripts/build-image.sh facodi-odoo:local
 ```
 
-Para atualizar o addon já instalado:
+Start the runtime:
 
 ```bash
-docker compose -f infrastructure/docker-compose.yml exec -T odoo \
-  odoo -d "$ODOO_DB" -u facodi_core --stop-after-init
+docker compose --env-file .env -f infrastructure/docker-compose.yml up -d
 ```
 
-## Estratégia de ambientes
+Odoo is bound to `127.0.0.1:8069` by default. Put a reverse proxy in front of it for public HTTP/HTTPS access.
 
-- `staging`: integração contínua e validação funcional.
-- `main`: produção.
-- Banco de dados e filestore são persistentes e **não** fazem parte do repositório.
-- Secrets nunca devem ser commitados; deploy usa GitHub Actions secrets.
+## CI
 
-## Secrets esperados no GitHub
+Pull requests run:
 
-### Staging
+```text
+repository contract
+       -> Compose validation
+       -> Docker build
+       -> PostgreSQL startup
+       -> install any FACODI modules discovered in the checked-out submodules
+```
 
-- `STAGING_HOST`
-- `STAGING_USER`
-- `STAGING_SSH_KEY`
-- `STAGING_KNOWN_HOSTS`
-- `STAGING_PATH`
+The placeholders are intentionally accepted until `facodi-learning` and `facodi-theme` are created.
 
-### Produção
+## CD
 
-- `PRODUCTION_HOST`
-- `PRODUCTION_USER`
-- `PRODUCTION_SSH_KEY`
-- `PRODUCTION_KNOWN_HOSTS`
-- `PRODUCTION_PATH`
+The intended branch mapping remains:
 
-## Ativação dos deploys
+```text
+staging -> staging FACODI environment
+main    -> production FACODI environment
+```
 
-Os workflows ficam deliberadamente bloqueados até a infraestrutura estar pronta. Depois de configurar a VM e os secrets, crie as seguintes **Actions variables** com valor `true`:
+When deployment is enabled, the corresponding workflow:
 
-- `DEPLOY_STAGING_ENABLED=true`
-- `DEPLOY_PRODUCTION_ENABLED=true`
+1. checks out the monorepo plus recursive submodules;
+2. authenticates to Google Cloud using GitHub OIDC/WIF;
+3. builds the Odoo image;
+4. pushes it to Artifact Registry tagged with the exact Git SHA;
+5. copies only the runtime Compose/deployment scripts to Compute Engine;
+6. tells the VM to pull that exact image;
+7. installs missing FACODI modules or upgrades already-installed ones;
+8. starts Odoo and runs a health check.
 
-Assim evitamos que um push tente publicar numa VM ainda não configurada.
+No application repository clone is required on the VM.
 
-## Próximo passo
+## Required GitHub Actions variables
 
-Preparar a VM de staging, criar o ficheiro `.env` diretamente no servidor, configurar os secrets do environment `staging` e então ativar `DEPLOY_STAGING_ENABLED=true`. A partir daí, qualquer push para a branch `staging` passa pelo CI e atualiza a instância Odoo automaticamente.
+Repository-level variables:
+
+```text
+GCP_PROJECT_ID
+GCP_REGION
+GCP_ARTIFACT_REPOSITORY
+FACODI_IMAGE_NAME
+GCP_WORKLOAD_IDENTITY_PROVIDER
+GCP_GITHUB_SERVICE_ACCOUNT
+```
+
+Staging environment variables:
+
+```text
+DEPLOY_STAGING_ENABLED=false
+STAGING_VM_NAME
+STAGING_VM_ZONE
+STAGING_DEPLOY_PATH
+```
+
+Production environment variables:
+
+```text
+DEPLOY_PRODUCTION_ENABLED=false
+PRODUCTION_VM_NAME
+PRODUCTION_VM_ZONE
+PRODUCTION_DEPLOY_PATH
+```
+
+Keep both deploy enable flags `false` until Artifact Registry, Workload Identity Federation, the Compute Engine VM and its `.env` file are configured.
+
+See [`docs/ci-cd.md`](docs/ci-cd.md) for the full Google Cloud setup and operational model.
+
+## Runtime persistence
+
+The image is disposable; state is not.
+
+Persistent resources are kept separately:
+
+- PostgreSQL database -> Docker volume / persistent disk strategy
+- Odoo filestore -> Docker volume / persistent disk strategy
+- runtime secrets -> VM `.env`, never Git
+
+This separation means the Odoo application image can be rebuilt or rolled back without treating GitHub as a data store.
