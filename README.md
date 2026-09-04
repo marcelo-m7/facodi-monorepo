@@ -25,16 +25,16 @@ A VM é ligada à VPC dual-stack do projeto FACODI. Apenas HTTP/HTTPS devem fica
 
 ```text
 addons/
-  facodi_core/          núcleo inicial do addon Odoo
+  facodi_core/           núcleo inicial do addon Odoo
 infrastructure/
-  docker-compose.yml   runtime local/VM
-  odoo.conf.example    configuração base do Odoo
+  docker-compose.yml    runtime local/VM
+  odoo.conf.example     configuração base de referência
 scripts/
-  deploy.sh            atualização segura da instância
-  healthcheck.sh       verificação HTTP
+  deploy.sh             atualização segura da instância
+  healthcheck.sh        verificação HTTP
 .github/workflows/
-  ci.yml               validação do addon
-  deploy-staging.yml   deploy da branch staging
+  ci.yml                instalação limpa do addon em CI
+  deploy-staging.yml    deploy da branch staging
   deploy-production.yml deploy da branch main
 docs/
   architecture.md
@@ -44,7 +44,7 @@ docs/
 ## Desenvolvimento local
 
 1. Copie `.env.example` para `.env`.
-2. Defina `POSTGRES_PASSWORD` e `ODOO_DB`.
+2. Defina pelo menos `POSTGRES_PASSWORD`, `ODOO_ADMIN_PASSWD` e `ODOO_DB`.
 3. Execute:
 
 ```bash
@@ -53,14 +53,14 @@ docker compose -f infrastructure/docker-compose.yml up -d
 
 Odoo fica disponível em `http://localhost:8069`.
 
-Para instalar/atualizar o addon:
+Para uma instalação nova do addon:
 
 ```bash
 docker compose -f infrastructure/docker-compose.yml exec -T odoo \
   odoo -d "$ODOO_DB" -i facodi_core --stop-after-init
 ```
 
-ou, após já estar instalado:
+Para atualizar o addon já instalado:
 
 ```bash
 docker compose -f infrastructure/docker-compose.yml exec -T odoo \
@@ -81,6 +81,7 @@ docker compose -f infrastructure/docker-compose.yml exec -T odoo \
 - `STAGING_HOST`
 - `STAGING_USER`
 - `STAGING_SSH_KEY`
+- `STAGING_KNOWN_HOSTS`
 - `STAGING_PATH`
 
 ### Produção
@@ -88,8 +89,9 @@ docker compose -f infrastructure/docker-compose.yml exec -T odoo \
 - `PRODUCTION_HOST`
 - `PRODUCTION_USER`
 - `PRODUCTION_SSH_KEY`
+- `PRODUCTION_KNOWN_HOSTS`
 - `PRODUCTION_PATH`
 
-## Estado
+## Próximo passo
 
-Base inicial de infraestrutura e desenvolvimento. O objetivo imediato é ter uma instância Odoo 19 Community reproduzível, com addon FACODI versionado no GitHub e deploy separado para staging e produção.
+Preparar a VM de staging, criar o ficheiro `.env` diretamente no servidor e configurar os secrets do environment `staging`. A partir daí, qualquer push para a branch `staging` passa pelo CI e pode atualizar a instância Odoo automaticamente.
