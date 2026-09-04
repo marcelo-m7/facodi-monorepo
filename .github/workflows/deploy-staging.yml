@@ -1,0 +1,36 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: facodi-staging
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Configure SSH
+        env:
+          SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.STAGING_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+      - name: Deploy
+        env:
+          HOST: ${{ secrets.STAGING_HOST }}
+          USER: ${{ secrets.STAGING_USER }}
+          PATH_ON_HOST: ${{ secrets.STAGING_PATH }}
+        run: |
+          ssh "$USER@$HOST" "cd '$PATH_ON_HOST' && bash scripts/deploy.sh staging"
