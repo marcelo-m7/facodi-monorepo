@@ -24,6 +24,9 @@ grep -q 'IPV4_IPV6' infrastructure/gcp/create-vm.sh
 grep -q '35.235.240.0/20' infrastructure/gcp/create-vm.sh
 grep -q 'roles/iam.workloadIdentityUser' infrastructure/gcp/configure-wif.sh
 grep -q 'attribute.repository' infrastructure/gcp/configure-wif.sh
+grep -q 'attribute.ref=assertion.ref' infrastructure/gcp/configure-wif.sh
+grep -q "assertion.ref == 'refs/heads/main'" infrastructure/gcp/configure-wif.sh
+grep -q "assertion.ref == 'refs/heads/staging'" infrastructure/gcp/configure-wif.sh
 grep -q 'ensure_artifact_repository_role' infrastructure/gcp/configure-wif.sh
 grep -q 'roles/artifactregistry.writer' infrastructure/gcp/configure-wif.sh
 grep -q 'roles/artifactregistry.reader' infrastructure/gcp/configure-wif.sh
