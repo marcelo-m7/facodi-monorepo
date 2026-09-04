@@ -30,7 +30,7 @@ if grep -Fq '../addons:/mnt/extra-addons' infrastructure/docker-compose.yml; the
   fail "Compose must not bind-mount addon source"
 fi
 
-if grep -R -nE 'service[_-]?account.*\.json|GOOGLE_APPLICATION_CREDENTIALS.*\.json' .github scripts infrastructure docker 2>/dev/null; then
+if grep -R -nE --exclude='validate-repository.sh' 'service[_-]?account.*\.json|GOOGLE_APPLICATION_CREDENTIALS.*\.json' .github scripts infrastructure docker 2>/dev/null; then
   fail "long-lived Google JSON credentials are not allowed"
 fi
 
