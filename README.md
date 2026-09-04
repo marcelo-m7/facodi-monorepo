@@ -92,6 +92,15 @@ docker compose -f infrastructure/docker-compose.yml exec -T odoo \
 - `PRODUCTION_KNOWN_HOSTS`
 - `PRODUCTION_PATH`
 
+## Ativação dos deploys
+
+Os workflows ficam deliberadamente bloqueados até a infraestrutura estar pronta. Depois de configurar a VM e os secrets, crie as seguintes **Actions variables** com valor `true`:
+
+- `DEPLOY_STAGING_ENABLED=true`
+- `DEPLOY_PRODUCTION_ENABLED=true`
+
+Assim evitamos que um push tente publicar numa VM ainda não configurada.
+
 ## Próximo passo
 
-Preparar a VM de staging, criar o ficheiro `.env` diretamente no servidor e configurar os secrets do environment `staging`. A partir daí, qualquer push para a branch `staging` passa pelo CI e pode atualizar a instância Odoo automaticamente.
+Preparar a VM de staging, criar o ficheiro `.env` diretamente no servidor, configurar os secrets do environment `staging` e então ativar `DEPLOY_STAGING_ENABLED=true`. A partir daí, qualquer push para a branch `staging` passa pelo CI e atualiza a instância Odoo automaticamente.
