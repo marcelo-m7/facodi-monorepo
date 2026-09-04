@@ -53,6 +53,6 @@ fi
   "${module_action[@]}"
 
 "${COMPOSE[@]}" up -d odoo
-"$ROOT_DIR/scripts/healthcheck.sh" "${ODOO_HEALTHCHECK_URL:-http://127.0.0.1:${ODOO_PORT:-8069}/web/login}"
+bash "$ROOT_DIR/scripts/healthcheck.sh" "${ODOO_HEALTHCHECK_URL:-http://127.0.0.1:${ODOO_PORT:-8069}/web/login}"
 
 echo "Deploy completed"
