@@ -88,15 +88,15 @@ else
   log "repository Workload Identity User binding already present"
 fi
 
-for role in \
-  roles/artifactregistry.writer \
-  roles/iap.tunnelResourceAccessor \
-  roles/compute.osAdminLogin \
-  roles/compute.viewer; do
-  ensure_project_role "serviceAccount:$DEPLOY_SA" "$role"
-done
+# Artifact Registry access is deliberately scoped to the FACODI repository,
+# rather than granting writer/reader permissions across the entire project.
+ensure_artifact_repository_role "serviceAccount:$DEPLOY_SA" roles/artifactregistry.writer
+ensure_artifact_repository_role "serviceAccount:$RUNTIME_SA" roles/artifactregistry.reader
 
-ensure_project_role "serviceAccount:$RUNTIME_SA" roles/artifactregistry.reader
+# OS Admin Login already includes the Compute get/list/project permissions
+# required by gcloud compute ssh/scp when OS Login is enabled.
+ensure_project_role "serviceAccount:$DEPLOY_SA" roles/iap.tunnelResourceAccessor
+ensure_project_role "serviceAccount:$DEPLOY_SA" roles/compute.osAdminLogin
 
 existing_act_as="$(gcloud iam service-accounts get-iam-policy "$RUNTIME_SA" \
   --project "$GCP_PROJECT_ID" \
