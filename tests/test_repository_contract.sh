@@ -49,6 +49,7 @@ grep -Fq 'website_page' scripts/migrate-theme-module-name.sh && fail "migration 
 [[ -x scripts/apply-facodi-theme.sh ]] || fail "theme application helper must be executable"
 grep -Fq 'button_choose_theme' scripts/apply-facodi-theme.sh || fail "theme application must use Odoo standard theme selection API"
 grep -Fq 'website_id' scripts/apply-facodi-theme.sh || fail "theme application must support website-scoped selection"
+grep -Fq 'odoo shell' scripts/apply-facodi-theme.sh || fail "theme helper must invoke the Odoo shell through the official image entrypoint"
 
 bash -n scripts/deploy-image.sh
 bash -n scripts/migrate-theme-module-name.sh
@@ -61,6 +62,7 @@ done
 
 [[ -x tests/test_theme_transition.sh ]] || fail "disposable theme transition integration test must be executable"
 bash -n tests/test_theme_transition.sh
+[[ "$(grep -Fc 'odoo shell' tests/test_theme_transition.sh)" -ge 2 ]] || fail "transition test must invoke Odoo shell through the official image entrypoint"
 grep -Fq 'test_theme_transition.sh' .github/workflows/ci.yml || fail "CI must exercise the legacy-to-native theme transition"
 grep -Fq 'theme_bewise' .github/workflows/ci.yml || fail "CI must verify unrelated design themes are absent from the image"
 
