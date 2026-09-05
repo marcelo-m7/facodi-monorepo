@@ -68,6 +68,12 @@ done
 "${COMPOSE[@]}" exec -T db dropdb -U "$POSTGRES_USER" --if-exists "$TRANSITION_DB" >/dev/null 2>&1 || true
 "${COMPOSE[@]}" exec -T db createdb -U "$POSTGRES_USER" "$TRANSITION_DB"
 
+# A first deployment reaches the migration helper before Odoo has initialized
+# the database schema. That state must be a safe no-op rather than an error.
+bash scripts/migrate-theme-module-name.sh
+registry_table="$("${COMPOSE[@]}" exec -T db psql -U "$POSTGRES_USER" -d "$TRANSITION_DB" -tAc "SELECT to_regclass('public.ir_module_module') IS NOT NULL")"
+[[ "$registry_table" == "f" ]] || { echo "migration unexpectedly initialized or mutated a fresh database" >&2; exit 1; }
+
 # Create a normal Odoo website database with the new image. theme_facodi is
 # discovered but left uninstalled, which gives us a real module-registry row to
 # transform into the historical presentation-only module for this disposable DB.
