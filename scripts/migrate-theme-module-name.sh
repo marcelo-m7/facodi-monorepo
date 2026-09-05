@@ -25,12 +25,24 @@ fi
 COMPOSE=("${DOCKER[@]}" compose --env-file "$ROOT_DIR/.env" -f infrastructure/docker-compose.yml)
 "${COMPOSE[@]}" up -d db
 
+ready=0
+for _attempt in $(seq 1 30); do
+  if "${COMPOSE[@]}" exec -T db pg_isready -U "$POSTGRES_USER" -d "$ODOO_DB" >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  sleep 2
+done
+[[ "$ready" -eq 1 ]] || { echo "PostgreSQL did not become ready for theme transition" >&2; exit 1; }
+
 psql_query() {
-  "${COMPOSE[@]}" exec -T db psql -U "$POSTGRES_USER" -d "$ODOO_DB" -tAc "$1"
+  "${COMPOSE[@]}" exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$ODOO_DB" -tAc "$1"
 }
 
-old_state="$(psql_query "SELECT state FROM ir_module_module WHERE name='website_facodi' LIMIT 1" 2>/dev/null || true)"
-new_state="$(psql_query "SELECT state FROM ir_module_module WHERE name='theme_facodi' LIMIT 1" 2>/dev/null || true)"
+# Fail closed on connection/schema errors. An empty result means the row truly
+# does not exist; a failed query must never be reinterpreted as that condition.
+old_state="$(psql_query "SELECT state FROM ir_module_module WHERE name='website_facodi' LIMIT 1")"
+new_state="$(psql_query "SELECT state FROM ir_module_module WHERE name='theme_facodi' LIMIT 1")"
 
 if [[ -z "$old_state" ]]; then
   echo "No legacy website_facodi module record; no transition required."
