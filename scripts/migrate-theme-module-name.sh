@@ -39,6 +39,15 @@ psql_query() {
   "${COMPOSE[@]}" exec -T db psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$ODOO_DB" -tAc "$1"
 }
 
+# A freshly created PostgreSQL database exists before Odoo has initialized its
+# registry tables. That state requires no legacy transition and must remain a
+# no-op. Other query/connection errors still fail closed through psql_query.
+registry_ready="$(psql_query "SELECT to_regclass('public.ir_module_module') IS NOT NULL")"
+if [[ "$registry_ready" != "t" ]]; then
+  echo "Odoo registry schema is not initialized; no legacy theme transition required."
+  exit 0
+fi
+
 # Fail closed on connection/schema errors. An empty result means the row truly
 # does not exist; a failed query must never be reinterpreted as that condition.
 old_state="$(psql_query "SELECT state FROM ir_module_module WHERE name='website_facodi' LIMIT 1")"
