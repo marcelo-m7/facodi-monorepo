@@ -24,6 +24,14 @@ set +a
 : "${POSTGRES_USER:=odoo}"
 : "${FACODI_MODULES:=facodi_learning,theme_facodi}"
 
+# Existing deployments may still carry the former presentation addon's name
+# in .env. Normalize that one known transition without mutating operator config.
+if [[ "$FACODI_MODULES" == *website_facodi* ]]; then
+  FACODI_MODULES="${FACODI_MODULES//website_facodi/theme_facodi}"
+  export FACODI_MODULES
+  echo "normalized legacy FACODI_MODULES entry website_facodi -> theme_facodi"
+fi
+
 for module in ${FACODI_MODULES//,/ }; do
   if [[ ! "$module" =~ ^[a-z0-9_]+$ ]]; then
     echo "invalid Odoo module name in FACODI_MODULES: $module" >&2
@@ -41,7 +49,7 @@ else
 fi
 
 export FACODI_IMAGE="$IMAGE_URI"
-COMPOSE=("${DOCKER[@]}" compose -f infrastructure/docker-compose.yml)
+COMPOSE=("${DOCKER[@]}" compose --env-file "$ROOT_DIR/.env" -f infrastructure/docker-compose.yml)
 
 registry="${IMAGE_URI%%/*}"
 if [[ "$registry" == *-docker.pkg.dev ]]; then
@@ -55,6 +63,11 @@ fi
 
 "${COMPOSE[@]}" pull odoo
 "${COMPOSE[@]}" up -d db
+"${COMPOSE[@]}" stop odoo >/dev/null 2>&1 || true
+
+# This guarded one-time transition removes only the known legacy presentation
+# module metadata. It is a no-op once website_facodi is absent.
+bash "$ROOT_DIR/scripts/migrate-theme-module-name.sh"
 
 install_modules=()
 update_modules=()
@@ -70,8 +83,6 @@ for module in "${requested_modules[@]}"; do
   fi
 done
 
-"${COMPOSE[@]}" stop odoo >/dev/null 2>&1 || true
-
 odoo_args=(--stop-after-init --without-demo=all -d "$ODOO_DB")
 if (( ${#install_modules[@]} > 0 )); then
   install_csv="$(IFS=,; echo "${install_modules[*]}")"
@@ -85,6 +96,11 @@ if (( ${#update_modules[@]} > 0 )); then
 fi
 
 "${COMPOSE[@]}" run --rm odoo "${odoo_args[@]}"
+
+# Installing a theme registers its templates. Selecting it on each Website is a
+# separate standard Odoo lifecycle step and must happen after module operations.
+bash "$ROOT_DIR/scripts/apply-facodi-theme.sh"
+
 "${COMPOSE[@]}" up -d --no-build odoo
 
 bash "$ROOT_DIR/scripts/healthcheck.sh" "${ODOO_HEALTHCHECK_URL:-http://127.0.0.1:${ODOO_PORT:-8069}/web/login}"

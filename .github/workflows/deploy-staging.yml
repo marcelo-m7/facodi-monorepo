@@ -68,7 +68,11 @@ jobs:
           gcloud compute scp infrastructure/docker-compose.yml \
             "$VM_NAME:$DEPLOY_PATH/infrastructure/docker-compose.yml" \
             --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap --quiet
-          gcloud compute scp scripts/deploy-image.sh scripts/healthcheck.sh \
+          gcloud compute scp \
+            scripts/deploy-image.sh \
+            scripts/healthcheck.sh \
+            scripts/migrate-theme-module-name.sh \
+            scripts/apply-facodi-theme.sh \
             "$VM_NAME:$DEPLOY_PATH/scripts/" \
             --project "$PROJECT_ID" --zone "$VM_ZONE" --tunnel-through-iap --quiet
 

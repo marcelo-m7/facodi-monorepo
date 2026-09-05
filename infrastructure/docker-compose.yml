@@ -31,6 +31,9 @@ services:
       PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       ODOO_ADMIN_PASSWD: ${ODOO_ADMIN_PASSWD:?ODOO_ADMIN_PASSWD is required}
     command:
+      - /usr/local/bin/facodi-odoo-server
+      - -d
+      - ${ODOO_DB:?ODOO_DB is required}
       - --proxy-mode
       - --workers=${ODOO_WORKERS:-2}
       - --max-cron-threads=${ODOO_MAX_CRON_THREADS:-1}
