@@ -39,8 +39,10 @@ fi
 
 export ODOO_DB="$TRANSITION_DB"
 
+# The helper scripts must preserve the immutable image selected by their parent
+# deployment process even when the persisted .env still names an older image.
 cat > .env <<EOF
-FACODI_IMAGE=$FACODI_IMAGE
+FACODI_IMAGE=facodi-stale-image:must-not-be-used
 FACODI_MODULES=facodi_learning,theme_facodi
 POSTGRES_USER=$POSTGRES_USER
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
