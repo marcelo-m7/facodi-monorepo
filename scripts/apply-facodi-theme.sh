@@ -24,7 +24,9 @@ fi
 COMPOSE=("${DOCKER[@]}" compose --env-file "$ROOT_DIR/.env" -f infrastructure/docker-compose.yml)
 "${COMPOSE[@]}" up -d db
 
-"${COMPOSE[@]}" run --rm -T odoo shell -d "$ODOO_DB" <<'PY'
+# The official Odoo image only prepends the `odoo` executable when the first
+# argument is an option. For the `shell` subcommand it must be explicit.
+"${COMPOSE[@]}" run --rm -T odoo odoo shell -d "$ODOO_DB" <<'PY'
 theme = env["ir.module.module"].search(
     [("name", "=", "theme_facodi"), ("state", "=", "installed")], limit=1
 )
