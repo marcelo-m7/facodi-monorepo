@@ -84,7 +84,11 @@ fi
 bash -n docker/facodi-odoo-server.sh
 grep -Fq 'ODOO_ADMIN_PASSWD' infrastructure/docker-compose.yml || fail "Compose must pass the Odoo master password to the runtime wrapper"
 grep -Fq '/usr/local/bin/facodi-odoo-server' infrastructure/docker-compose.yml || fail "Compose must start Odoo through the runtime config wrapper"
-grep -Eq -- '(^|[[:space:]-])-d=\$\{ODOO_DB' infrastructure/docker-compose.yml || fail "persistent Odoo server must select the configured ODOO_DB"
+if grep -Eq -- '^[[:space:]]+- -d=' infrastructure/docker-compose.yml; then
+  fail "Odoo short -d option must receive the database name as a separate argument"
+fi
+grep -Eq -- '^[[:space:]]+- -d[[:space:]]*$' infrastructure/docker-compose.yml || fail "persistent Odoo server must declare the -d database option"
+grep -Fq -- '- ${ODOO_DB:?ODOO_DB is required}' infrastructure/docker-compose.yml || fail "persistent Odoo server must pass ODOO_DB after -d"
 grep -Fq 'COPY docker/facodi-odoo-server.sh /usr/local/bin/facodi-odoo-server' docker/Dockerfile || fail "Docker image must install the runtime config wrapper"
 grep -Fq 'admin_passwd' docker/facodi-odoo-server.sh || fail "runtime wrapper must write admin_passwd to Odoo config"
 grep -Fq 'chmod 600' docker/facodi-odoo-server.sh || fail "runtime Odoo config must be private"
