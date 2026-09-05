@@ -19,4 +19,7 @@ RUN set -eux; \
     done; \
     [ "$found" -eq 1 ] || { echo "no Odoo addons found in submodule sources" >&2; exit 1; }; \
     chown -R odoo:odoo /mnt/extra-addons
+COPY --chown=odoo:odoo docker/facodi-entrypoint.sh /usr/local/bin/facodi-entrypoint
+RUN chmod 755 /usr/local/bin/facodi-entrypoint
 USER odoo
+ENTRYPOINT ["/usr/local/bin/facodi-entrypoint"]

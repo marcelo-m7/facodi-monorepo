@@ -29,7 +29,7 @@ POSTGRES_USER=odoo
 POSTGRES_PASSWORD=<strong-secret>
 ODOO_DB=facodi
 ODOO_ADMIN_PASSWD=<strong-secret>
-FACODI_MODULES=facodi_learning,website_facodi
+FACODI_MODULES=facodi_learning,theme_facodi
 ```
 
 ## 2. Identidade da VM
@@ -59,7 +59,7 @@ O script:
 1. autentica Docker no Artifact Registry;
 2. faz pull apenas da imagem Odoo indicada;
 3. sobe PostgreSQL;
-4. deteta, para `facodi_learning` e `website_facodi`, se cada módulo deve ser instalado ou atualizado;
+4. deteta, para `facodi_learning` e `theme_facodi`, se cada módulo deve ser instalado ou atualizado;
 5. executa a inicialização/upgrade Odoo com `--stop-after-init`;
 6. sobe o serviço Odoo;
 7. valida `/web/login` com o health check.

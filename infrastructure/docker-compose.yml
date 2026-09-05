@@ -29,9 +29,9 @@ services:
       PORT: 5432
       USER: ${POSTGRES_USER:-odoo}
       PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      ODOO_ADMIN_PASSWD: ${ODOO_ADMIN_PASSWD:?ODOO_ADMIN_PASSWD is required}
     command:
       - --proxy-mode
-      - --admin-passwd=${ODOO_ADMIN_PASSWD:?ODOO_ADMIN_PASSWD is required}
       - --workers=${ODOO_WORKERS:-2}
       - --max-cron-threads=${ODOO_MAX_CRON_THREADS:-1}
       - --gevent-port=8072

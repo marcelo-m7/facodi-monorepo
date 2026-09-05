@@ -7,7 +7,7 @@
 The active addon repositories are:
 
 - `https://github.com/marcelo-m7/facodi-learning.git` -> technical Odoo module `facodi_learning`
-- `https://github.com/marcelo-m7/facodi-theme.git` -> technical Odoo module `website_facodi`
+- `https://github.com/marcelo-m7/facodi-theme.git` -> technical Odoo module `theme_facodi`
 
 They are consumed as pinned Git submodules under `addons/`.
 
@@ -171,7 +171,7 @@ Required runtime values include:
 POSTGRES_PASSWORD
 ODOO_ADMIN_PASSWD
 ODOO_DB
-FACODI_MODULES=facodi_learning,website_facodi
+FACODI_MODULES=facodi_learning,theme_facodi
 ```
 
 `FACODI_IMAGE` is supplied by the deployment script for each release and does not need to be permanently pinned in `.env`.

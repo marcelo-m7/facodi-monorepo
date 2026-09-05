@@ -22,7 +22,7 @@ set +a
 
 : "${ODOO_DB:?ODOO_DB must be set in .env}"
 : "${POSTGRES_USER:=odoo}"
-: "${FACODI_MODULES:=facodi_learning,website_facodi}"
+: "${FACODI_MODULES:=facodi_learning,theme_facodi}"
 
 for module in ${FACODI_MODULES//,/ }; do
   if [[ ! "$module" =~ ^[a-z0-9_]+$ ]]; then
@@ -41,7 +41,7 @@ else
 fi
 
 export FACODI_IMAGE="$IMAGE_URI"
-COMPOSE=("${DOCKER[@]}" compose --env-file "$ROOT_DIR/.env" -f infrastructure/docker-compose.yml)
+COMPOSE=("${DOCKER[@]}" compose -f infrastructure/docker-compose.yml)
 
 registry="${IMAGE_URI%%/*}"
 if [[ "$registry" == *-docker.pkg.dev ]]; then

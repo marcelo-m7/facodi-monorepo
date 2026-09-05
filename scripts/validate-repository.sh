@@ -22,9 +22,9 @@ git ls-files --stage addons/facodi-learning | grep -Eq '^160000 ' || fail "addon
 git ls-files --stage addons/facodi-theme | grep -Eq '^160000 ' || fail "addons/facodi-theme is not a Gitlink"
 
 [[ -f addons/facodi-learning/facodi_learning/__manifest__.py ]] || fail "facodi_learning manifest is missing"
-[[ -f addons/facodi-theme/website_facodi/__manifest__.py ]] || fail "website_facodi manifest is missing"
+[[ -f addons/facodi-theme/theme_facodi/__manifest__.py ]] || fail "theme_facodi manifest is missing"
 
-grep -Fq 'FACODI_MODULES=facodi_learning,website_facodi' .env.example || fail "runtime module list does not match checked-out addons"
+grep -Fq 'FACODI_MODULES=facodi_learning,theme_facodi' .env.example || fail "runtime module list does not match checked-out addons"
 
 [[ -f scripts/deploy-image.sh ]] || fail "scripts/deploy-image.sh is missing"
 if grep -Eq 'git[[:space:]]+(pull|fetch|checkout|clone)' scripts/deploy-image.sh; then

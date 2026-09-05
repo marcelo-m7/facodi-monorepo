@@ -20,7 +20,7 @@ marcelo-m7/facodi-learning
 
 marcelo-m7/facodi-theme
   -> addons/facodi-theme
-  -> technical module: website_facodi
+   -> technical module: theme_facodi
 ```
 
 O nome do repositório não precisa ser igual ao nome técnico do módulo Odoo. O monorepo guarda o Gitlink de cada submodule, logo cada commit do monorepo define exatamente as versões dos dois addons usadas no build.

@@ -161,7 +161,7 @@ Create the runtime configuration as a **root-owned secret**. The GitHub OS Login
 sudo install -d -m 0755 /opt/facodi
 
 sudo tee /opt/facodi/.env >/dev/null <<EOF
-FACODI_MODULES=facodi_learning,website_facodi
+FACODI_MODULES=facodi_learning,theme_facodi
 POSTGRES_USER=odoo
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 ODOO_DB=facodi_staging
@@ -203,7 +203,7 @@ The workflow will:
 7. run the deployment script under OS Login administrative `sudo` so it can read root-owned runtime secrets;
 8. authenticate Docker with the VM runtime identity's short-lived access token;
 9. pull the exact image;
-10. install/update `facodi_learning` and `website_facodi`;
+10. install/update `facodi_learning` and `theme_facodi`;
 11. start Odoo and perform the HTTP health check.
 
 ## DNS and reverse proxy

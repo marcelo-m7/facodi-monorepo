@@ -41,7 +41,7 @@ The running Odoo container never performs `git pull`. Every deployed image conta
 The active submodules are:
 
 - `marcelo-m7/facodi-learning` -> Odoo technical module `facodi_learning`
-- `marcelo-m7/facodi-theme` -> Odoo technical module `website_facodi`
+- `marcelo-m7/facodi-theme` -> Odoo technical module `theme_facodi`
 
 The repository names and Odoo technical module names are intentionally independent. The Git submodule stores a repository commit; the Docker image discovers the Odoo module directories inside each checked-out repository and copies them into `/mnt/extra-addons`.
 
