@@ -6,6 +6,7 @@ LABEL org.opencontainers.image.source="https://github.com/marcelo-m7/facodi-mono
 
 USER root
 COPY addons/ /opt/facodi-addon-sources/
+COPY vendor/odoo-design-themes/theme_common/ /opt/odoo-theme-common/
 RUN set -eux; \
     mkdir -p /mnt/extra-addons; \
     found=0; \
@@ -18,5 +19,8 @@ RUN set -eux; \
         found=1; \
     done; \
     [ "$found" -eq 1 ] || { echo "no Odoo addons found in submodule sources" >&2; exit 1; }; \
+    test -f /opt/odoo-theme-common/__manifest__.py; \
+    [ ! -e /mnt/extra-addons/theme_common ] || { echo "duplicate Odoo module: theme_common" >&2; exit 1; }; \
+    cp -a /opt/odoo-theme-common /mnt/extra-addons/theme_common; \
     chown -R odoo:odoo /mnt/extra-addons
 USER odoo
