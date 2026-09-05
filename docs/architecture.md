@@ -31,7 +31,7 @@ Pins de composição desta evolução:
 
 ```text
 addons/facodi-theme
-  -> e10bebb051bd6c15c47915a986b7c2168c837265
+  -> 04c85cdf2d421e29a6ff9d60318e48ba1f306bad
   -> technical module: theme_facodi
 
 vendor/odoo-design-themes
@@ -57,6 +57,10 @@ O Dockerfile copia somente `theme_common` do repositório oficial de design them
 O addon FACODI acrescenta identidade visual, snippets editáveis e heranças estreitas. QWeb de apresentação não deve executar pesquisas de dados de negócio com `request.env`/`sudo()`.
 
 A instalação do módulo e a seleção do theme são passos distintos no Odoo. Depois da instalação/upgrade, `scripts/apply-facodi-theme.sh` usa o método standard `ir.module.module.button_choose_theme()` com contexto `website_id` para aplicar `theme_facodi`.
+
+## Configuração runtime do Odoo 19
+
+`admin_passwd` é uma opção de ficheiro no Odoo 19 e não é passada pela linha de comandos. `docker/facodi-odoo-server.sh` gera dentro do container um ficheiro de configuração privado (`0600`) a partir do `ODOO_ADMIN_PASSWD` fornecido pelo `.env` protegido da VM e, em seguida, delega para o entrypoint oficial da imagem Odoo. O serviço persistente recebe ainda `-d` e `ODOO_DB` como argumentos separados, evitando seleção ambígua ou criação acidental de outra base.
 
 ## Transição do addon legado
 

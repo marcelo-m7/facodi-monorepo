@@ -13,7 +13,7 @@ Pinned components:
 Current verified integration pins:
 
 ```text
-facodi-theme: e10bebb051bd6c15c47915a986b7c2168c837265
+facodi-theme: 04c85cdf2d421e29a6ff9d60318e48ba1f306bad
 odoo/design-themes: a1818df4ade65406c0cacae8b1ea676e6f70095f
 ```
 
@@ -47,7 +47,8 @@ Pull requests execute:
 3. Compose validation;
 4. immutable Odoo 19 image build;
 5. PostgreSQL startup;
-6. clean installation of the discovered FACODI modules.
+6. disposable `website_facodi -> theme_facodi` transition with HTTP smoke tests;
+7. clean installation of the discovered FACODI modules.
 
 The `theme_facodi` repository has its own Odoo 19 CI and must be pinned only after that CI is green. Its CI verifies theme-template generation, frontend asset compilation, homepage rendering, standard favicon ownership and `/slides` rendering.
 
@@ -82,6 +83,8 @@ ODOO_ADMIN_PASSWD
 ODOO_DB
 FACODI_MODULES=facodi_learning,theme_facodi
 ```
+
+Odoo 19 does not accept `admin_passwd` as a server CLI option. The immutable image includes `facodi-odoo-server.sh`, which writes that value into a private mode-`0600` runtime config inside the disposable container and delegates to the official image entrypoint. Compose passes the configured database as the standard two-argument `-d`, `<ODOO_DB>` pair.
 
 If an existing environment still contains `website_facodi`, `deploy-image.sh` normalizes that known legacy token for the deployment, but the operator should update the persisted `.env` after a successful transition.
 

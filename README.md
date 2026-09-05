@@ -28,7 +28,7 @@ odoo/design-themes          -> theme_common only
 
 The theme dependency is pinned at `odoo/design-themes@a1818df4ade65406c0cacae8b1ea676e6f70095f`. The Docker image copies **only** `theme_common`; unrelated official themes are not baked into the runtime.
 
-The currently verified FACODI theme pin is `marcelo-m7/facodi-theme@e10bebb051bd6c15c47915a986b7c2168c837265`.
+The currently verified FACODI theme pin is `marcelo-m7/facodi-theme@04c85cdf2d421e29a6ff9d60318e48ba1f306bad`.
 
 GitHub authenticates to Google Cloud with **OIDC + Workload Identity Federation**. Long-lived service-account JSON keys are not part of the design. The running Odoo container never performs `git pull` or any other source checkout.
 
@@ -62,6 +62,7 @@ vendor/
   odoo-design-themes/       pinned upstream; image consumes theme_common only
 docker/
   Dockerfile                immutable Odoo 19 image
+  facodi-odoo-server.sh     private runtime Odoo configuration wrapper
 infrastructure/
   docker-compose.yml        persistent Odoo/PostgreSQL runtime
   gcp/                      one-time GCP/WIF/VM bootstrap
@@ -98,6 +99,8 @@ The default technical modules are:
 FACODI_MODULES=facodi_learning,theme_facodi
 ```
 
+Odoo 19 treats `admin_passwd` as a file-only configuration option. The persistent service therefore receives `ODOO_ADMIN_PASSWD` from the protected runtime `.env`, generates a mode-`0600` config inside the disposable container through `facodi-odoo-server.sh`, and then delegates to the official Odoo Docker entrypoint. The Compose service also selects `ODOO_DB` explicitly with the standard `-d <database>` arguments.
+
 Odoo is bound to `127.0.0.1:8069` by default. Public HTTP/HTTPS must terminate at a reverse proxy; PostgreSQL is never published publicly.
 
 ## Odoo theme lifecycle
@@ -133,7 +136,7 @@ Because this first transition changes module registry/view metadata, take a matc
 
 ## CI
 
-Pull requests run repository contracts, GCP bootstrap/login contracts, Compose validation, immutable image build and clean Odoo module installation against the exact recursive submodule pins.
+Pull requests run repository contracts, GCP bootstrap/login contracts, Compose validation, immutable image build, the disposable legacy-to-native theme transition and clean Odoo module installation against the exact recursive submodule pins.
 
 The FACODI theme repository separately runs its Odoo 19 theme tests, including asset compilation, homepage rendering, `/slides`, standard favicon ownership and theme-template loading.
 
