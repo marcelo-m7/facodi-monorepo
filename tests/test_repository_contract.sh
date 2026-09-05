@@ -75,6 +75,20 @@ if grep -Fq '../addons:/mnt/extra-addons' infrastructure/docker-compose.yml; the
   fail "Compose must not bind-mount addon source into the immutable runtime image"
 fi
 
+# Odoo 19 makes admin_passwd a file-only setting. The persistent server must
+# therefore create a private runtime config instead of passing --admin-passwd.
+if grep -Fq -- '--admin-passwd' infrastructure/docker-compose.yml; then
+  fail "Odoo 19 server must not receive the file-only admin_passwd as a CLI option"
+fi
+[[ -f docker/facodi-odoo-server.sh ]] || fail "Odoo 19 runtime config wrapper is required"
+bash -n docker/facodi-odoo-server.sh
+grep -Fq 'ODOO_ADMIN_PASSWD' infrastructure/docker-compose.yml || fail "Compose must pass the Odoo master password to the runtime wrapper"
+grep -Fq '/usr/local/bin/facodi-odoo-server' infrastructure/docker-compose.yml || fail "Compose must start Odoo through the runtime config wrapper"
+grep -Fq 'COPY docker/facodi-odoo-server.sh /usr/local/bin/facodi-odoo-server' docker/Dockerfile || fail "Docker image must install the runtime config wrapper"
+grep -Fq 'admin_passwd' docker/facodi-odoo-server.sh || fail "runtime wrapper must write admin_passwd to Odoo config"
+grep -Fq 'chmod 600' docker/facodi-odoo-server.sh || fail "runtime Odoo config must be private"
+grep -Fq 'exec /entrypoint.sh odoo' docker/facodi-odoo-server.sh || fail "runtime wrapper must delegate to the official Odoo Docker entrypoint"
+
 [[ -f .github/workflows/build-image.yml ]] || fail "build-image workflow is required"
 grep -Fq 'id-token: write' .github/workflows/build-image.yml || fail "build workflow must request GitHub OIDC token permission"
 grep -Fq 'google-github-actions/auth@' .github/workflows/build-image.yml || fail "build workflow must authenticate to Google Cloud with google-github-actions/auth"
