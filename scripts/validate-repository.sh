@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-THEME_SHA="eca3c2c5ec3e601559cb5d6e7415c892be938fd7"
+THEME_SHA="be35673a5649f5e6f7b01777905d0899e3daaf7b"
 DESIGN_THEMES_SHA="a1818df4ade65406c0cacae8b1ea676e6f70095f"
 
 fail() {

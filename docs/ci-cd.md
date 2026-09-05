@@ -13,7 +13,7 @@ Pinned components:
 Current verified integration pins:
 
 ```text
-facodi-theme: eca3c2c5ec3e601559cb5d6e7415c892be938fd7
+facodi-theme: be35673a5649f5e6f7b01777905d0899e3daaf7b
 odoo/design-themes: a1818df4ade65406c0cacae8b1ea676e6f70095f
 ```
 
@@ -50,7 +50,7 @@ Pull requests execute:
 6. disposable `website_facodi -> theme_facodi` transition with HTTP smoke tests;
 7. clean installation of the discovered FACODI modules.
 
-The `theme_facodi` repository has its own Odoo 19 CI and must be pinned only after that CI is green. Its CI verifies theme-template generation, frontend asset compilation, homepage rendering, standard favicon ownership and `/slides` rendering.
+The `theme_facodi` repository has its own Odoo 19 CI and must be pinned only after that CI is green. Its CI verifies native Odoo Website translations, theme-template generation, frontend asset compilation, homepage rendering, standard favicon ownership and `/slides` rendering.
 
 ## Google Cloud authentication
 

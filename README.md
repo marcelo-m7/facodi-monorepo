@@ -28,7 +28,7 @@ odoo/design-themes          -> theme_common only
 
 The theme dependency is pinned at `odoo/design-themes@a1818df4ade65406c0cacae8b1ea676e6f70095f`. The Docker image copies **only** `theme_common`; unrelated official themes are not baked into the runtime.
 
-The currently verified FACODI theme pin is `marcelo-m7/facodi-theme@eca3c2c5ec3e601559cb5d6e7415c892be938fd7`.
+The currently verified FACODI theme pin is `marcelo-m7/facodi-theme@be35673a5649f5e6f7b01777905d0899e3daaf7b`.
 
 GitHub authenticates to Google Cloud with **OIDC + Workload Identity Federation**. Long-lived service-account JSON keys are not part of the design. The running Odoo container never performs `git pull` or any other source checkout.
 
@@ -138,7 +138,7 @@ Because this first transition changes module registry/view metadata, take a matc
 
 Pull requests run repository contracts, GCP bootstrap/login contracts, Compose validation, immutable image build, the disposable legacy-to-native theme transition and clean Odoo module installation against the exact recursive submodule pins.
 
-The FACODI theme repository separately runs its Odoo 19 theme tests, including asset compilation, homepage rendering, `/slides`, standard favicon ownership and theme-template loading.
+The FACODI theme repository separately runs its Odoo 19 theme tests, including native Website translations, asset compilation, homepage rendering, `/slides`, standard favicon ownership and theme-template loading.
 
 ## CD
 

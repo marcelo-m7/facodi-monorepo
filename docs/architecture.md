@@ -23,6 +23,7 @@ Odoo 19 Community
 └── theme_facodi
     ├── palette and Website theme values
     ├── editable FACODI snippets
+    ├── native Odoo Website translations
     ├── narrow QWeb inheritance
     └── presentation-only website_slides styling
 ```
@@ -31,7 +32,7 @@ Pins de composição desta evolução:
 
 ```text
 addons/facodi-theme
-  -> eca3c2c5ec3e601559cb5d6e7415c892be938fd7
+  -> be35673a5649f5e6f7b01777905d0899e3daaf7b
   -> technical module: theme_facodi
 
 vendor/odoo-design-themes
@@ -50,11 +51,11 @@ O Dockerfile copia somente `theme_common` do repositório oficial de design them
 
 - header/footer e respetivos controlos do Website Builder;
 - logo e favicon;
-- páginas e conteúdo editável;
+- páginas, traduções e conteúdo editável;
 - catálogo, cursos e lições de `website_slides`;
 - seleção/aplicação de themes.
 
-O addon FACODI acrescenta identidade visual, snippets editáveis e heranças estreitas. QWeb de apresentação não deve executar pesquisas de dados de negócio com `request.env`/`sudo()`.
+O addon FACODI acrescenta identidade visual, snippets editáveis, catálogos nativos de tradução e heranças estreitas. QWeb de apresentação não deve executar pesquisas de dados de negócio com `request.env`/`sudo()`.
 
 A instalação do módulo e a seleção do theme são passos distintos no Odoo. Depois da instalação/upgrade, `scripts/apply-facodi-theme.sh` usa o método standard `ir.module.module.button_choose_theme()` com contexto `website_id` para aplicar `theme_facodi`.
 
