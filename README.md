@@ -2,57 +2,45 @@
 
 Composition, build and deployment repository for **FACODI — Faculdade Comunitária Digital** on Odoo 19 Community.
 
-This repository does **not** own the feature addons. It pins their exact Git commits, builds one immutable Odoo image and deploys that image to Google Compute Engine.
+This repository pins exact addon/upstream commits, builds one immutable Odoo image and deploys that image to Google Compute Engine. Feature implementation remains in the dedicated addon repositories.
 
-## Architecture
+## Runtime composition
 
 ```text
-marcelo-m7/facodi-learning     marcelo-m7/facodi-theme
-          |                              |
-          +---------- Git submodules ----+
-                         |
-                         v
-              marcelo-m7/facodi-monorepo
-                         |
-                  GitHub Actions
-                         |
-          checkout submodules recursively
-                         |
-                 docker/Dockerfile
-                         |
-                         v
-              Google Artifact Registry
-          odoo:<facodi-monorepo-commit-sha>
-                         |
-                         v
-               Google Compute Engine
-                 Docker Compose
-                /              \
-        Odoo 19 image       PostgreSQL 16
-        persistent filestore persistent DB
+marcelo-m7/facodi-learning  -> facodi_learning
+marcelo-m7/facodi-theme     -> theme_facodi
+odoo/design-themes          -> theme_common only
+             \                 |                 /
+              +------ pinned Git submodules ----+
+                              |
+                              v
+                    facodi-monorepo
+                              |
+                    immutable Docker image
+                              |
+                    Artifact Registry :SHA
+                              |
+                    Compute Engine + Compose
+                       /                 \
+                    Odoo 19          PostgreSQL 16
+                    filestore         database
 ```
 
-GitHub authenticates to Google Cloud with **OIDC + Workload Identity Federation**. Long-lived Google service-account JSON keys are not part of the design.
+The theme dependency is pinned at `odoo/design-themes@a1818df4ade65406c0cacae8b1ea676e6f70095f`. The Docker image copies **only** `theme_common`; unrelated official themes are not baked into the runtime.
 
-The running Odoo container never performs `git pull`. Every deployed image contains the exact addon versions pinned by the monorepo commit.
+The currently verified FACODI theme pin is `marcelo-m7/facodi-theme@e10bebb051bd6c15c47915a986b7c2168c837265`.
 
-## Addon repositories
+GitHub authenticates to Google Cloud with **OIDC + Workload Identity Federation**. Long-lived service-account JSON keys are not part of the design. The running Odoo container never performs `git pull` or any other source checkout.
 
-The active submodules are:
-
-- `marcelo-m7/facodi-learning` -> Odoo technical module `facodi_learning`
-- `marcelo-m7/facodi-theme` -> Odoo technical module `website_facodi`
-
-The repository names and Odoo technical module names are intentionally independent. The Git submodule stores a repository commit; the Docker image discovers the Odoo module directories inside each checked-out repository and copies them into `/mnt/extra-addons`.
-
-Current submodule paths:
+## Submodules
 
 ```text
 addons/facodi-learning
 addons/facodi-theme
+vendor/odoo-design-themes
 ```
 
-Clone locally with:
+Clone with:
 
 ```bash
 git clone --recurse-submodules https://github.com/marcelo-m7/facodi-monorepo.git
@@ -68,140 +56,101 @@ git submodule update --init --recursive
 
 ```text
 addons/
-  facodi-learning/          Git submodule
-  facodi-theme/             Git submodule
+  facodi-learning/          pinned addon repository
+  facodi-theme/             pinned addon repository
+vendor/
+  odoo-design-themes/       pinned upstream; image consumes theme_common only
 docker/
-  Dockerfile                Odoo 19 image with discovered modules baked in
+  Dockerfile                immutable Odoo 19 image
 infrastructure/
   docker-compose.yml        persistent Odoo/PostgreSQL runtime
-  gcp/
-    bootstrap-staging.sh    one-time GCP staging orchestration
-    configure-wif.sh        GitHub OIDC/WIF + service-account IAM
-    create-vm.sh            dual-stack VM, firewall and static IPv4
-    validate-staging.sh     cloud validation + GitHub variable output
-    vm-startup.sh           Docker/gcloud VM preparation
+  gcp/                      one-time GCP/WIF/VM bootstrap
 scripts/
-  gcp-login.sh              interactive gcloud install/login + local dotenv setup
-  build-image.sh            build/push one immutable image
-  deploy-image.sh           deploy a supplied image URI on a VM
-  healthcheck.sh            HTTP readiness verification
-  validate-repository.sh    architecture safety checks
+  build-image.sh
+  deploy-image.sh
+  migrate-theme-module-name.sh
+  apply-facodi-theme.sh
+  healthcheck.sh
+  validate-repository.sh
 .github/workflows/
-  ci.yml                    contract, GCP bootstrap contract, Compose, image build and clean install
-  build-image.yml           reusable WIF + Artifact Registry build
-  deploy-staging.yml        staging image build + IAP/Compute Engine deploy
-  deploy-production.yml     production image build + Compute Engine deploy
+  ci.yml
+  build-image.yml
+  deploy-staging.yml
+  deploy-production.yml
 docs/
-  ci-cd.md                  GitHub and image delivery model
-  gcp-staging.md            one-time staging provisioning/operator guide
   architecture.md
+  ci-cd.md
   deployment.md
+  gcp-staging.md
 ```
 
-## Local image build
-
-Copy the runtime configuration:
+## Local build
 
 ```bash
 cp .env.example .env
-```
-
-Build the same image structure used by CI:
-
-```bash
 bash scripts/build-image.sh facodi-odoo:local
-```
-
-Start the runtime:
-
-```bash
 docker compose --env-file .env -f infrastructure/docker-compose.yml up -d
 ```
 
-Odoo is bound to `127.0.0.1:8069` by default. Put a reverse proxy in front of it for public HTTP/HTTPS access.
+The default technical modules are:
 
-## Bootstrap Google Cloud staging
-
-The repository includes an idempotent `gcloud` bootstrap for the first staging environment. It expects the FACODI VPC/subnet to exist already and validates that the subnet is dual-stack with external IPv6.
-
-For an operator workstation, the helper below checks whether Google Cloud CLI is installed. If it is missing on Debian, Ubuntu or the Debian Linux environment used by ChromeOS, it asks before installing it from Google's official APT repository. It then performs interactive login, lists the accessible projects, validates the selected FACODI project and upserts the non-sensitive GCP/FACODI configuration into the existing `.env` without deleting unrelated entries:
-
-```bash
-bash scripts/gcp-login.sh
+```text
+FACODI_MODULES=facodi_learning,theme_facodi
 ```
 
-The helper never writes Google OAuth access/refresh tokens or service-account private keys to `.env`; those credentials remain managed by `gcloud`. The `.env` file remains ignored by Git and is set to mode `0600`.
+Odoo is bound to `127.0.0.1:8069` by default. Public HTTP/HTTPS must terminate at a reverse proxy; PostgreSQL is never published publicly.
 
-After login, load the values and run the bootstrap:
+## Odoo theme lifecycle
 
-```bash
-set -a
-source .env
-set +a
+`theme_facodi` is a native Odoo Website theme, not a parallel website application. Installing the module registers its theme templates. Deployment then selects it through Odoo's standard `ir.module.module.button_choose_theme()` lifecycle for each website.
 
-bash infrastructure/gcp/bootstrap-staging.sh
+The runtime therefore follows this order:
+
+```text
+pull exact image
+  -> stop Odoo
+  -> start PostgreSQL
+  -> guarded legacy transition if required
+  -> install/update facodi_learning + theme_facodi
+  -> select theme_facodi through Odoo theme API
+  -> start Odoo
+  -> health check
 ```
 
-Then validate and obtain the exact GitHub variable values:
+### Transition from `website_facodi`
 
-```bash
-bash infrastructure/gcp/validate-staging.sh
-```
+The previous `website_facodi` addon was a presentation-only normal addon containing one known inherited layout view. The new implementation intentionally does **not** rename its XML IDs into theme-template XML IDs.
 
-You can still use the explicit form if preferred:
+`scripts/migrate-theme-module-name.sh` performs a guarded one-time cleanup before `theme_facodi` is installed. It aborts instead of guessing if:
 
-```bash
-gcloud auth login
-GCP_PROJECT_ID=YOUR_PROJECT_ID \
-  bash infrastructure/gcp/bootstrap-staging.sh
-```
+- both old and new module records exist;
+- the old addon owns XML IDs other than its known `website_layout` view; or
+- another custom view inherits from that legacy view.
 
-The bootstrap creates no service-account JSON key and no Odoo/PostgreSQL password. Keep `DEPLOY_STAGING_ENABLED=false` until `/opt/facodi/.env` exists on the VM and validation succeeds.
+It does not modify `website_page` records or Website Builder page content. Existing VM `.env` files that still contain `website_facodi` are normalized in-memory by `deploy-image.sh`; operators should nevertheless update them permanently to `theme_facodi`.
 
-See [`docs/gcp-staging.md`](docs/gcp-staging.md) for the complete staging setup.
+Because this first transition changes module registry/view metadata, take a matching **PostgreSQL + filestore backup** before deploying it to an existing environment. Image rollback alone is not a complete rollback boundary for that first deployment.
 
 ## CI
 
-Pull requests run:
+Pull requests run repository contracts, GCP bootstrap/login contracts, Compose validation, immutable image build and clean Odoo module installation against the exact recursive submodule pins.
 
-```text
-checkout recursive submodules
-       -> repository contract
-       -> GCP bootstrap contract
-       -> GCP login helper contract
-       -> Compose validation
-       -> immutable Docker build
-       -> PostgreSQL startup
-       -> clean installation of discovered Odoo modules
-```
-
-The integration test therefore validates the exact addon commits pinned by the monorepo, not placeholders or mocks. The GCP bootstrap and login-helper contracts run without cloud credentials.
+The FACODI theme repository separately runs its Odoo 19 theme tests, including asset compilation, homepage rendering, `/slides`, standard favicon ownership and theme-template loading.
 
 ## CD
 
-The intended branch mapping is:
+Branch mapping:
 
 ```text
-staging -> staging FACODI environment
-main    -> production FACODI environment
+staging -> staging environment
+main    -> production environment
 ```
 
-When deployment is enabled, the corresponding workflow:
+When enabled, deployment builds and pushes an image tagged with the exact monorepo SHA, copies only the Compose/runtime scripts to the VM, pulls that exact image using the VM runtime identity, runs the guarded module/theme lifecycle and performs the HTTP health check. No application repository clone is required on the VM.
 
-1. checks out the monorepo plus recursive submodules;
-2. authenticates to Google Cloud using GitHub OIDC/WIF;
-3. builds the Odoo image;
-4. pushes it to Artifact Registry tagged with the exact Git SHA;
-5. connects to staging through IAP and copies only the runtime Compose/deployment scripts;
-6. tells the VM to pull that exact image using the VM runtime identity;
-7. installs missing FACODI modules or upgrades already-installed ones;
-8. starts Odoo and runs a health check.
+## Required GitHub variables
 
-No application repository clone is required on the VM.
-
-## Required GitHub Actions variables
-
-Repository-level variables:
+Repository Actions variables:
 
 ```text
 GCP_PROJECT_ID
@@ -214,34 +163,23 @@ DEPLOY_STAGING_ENABLED=false
 DEPLOY_PRODUCTION_ENABLED=false
 ```
 
-Staging environment variables:
+Environment variables:
 
 ```text
 STAGING_VM_NAME
 STAGING_VM_ZONE
 STAGING_DEPLOY_PATH
-```
-
-Production environment variables:
-
-```text
 PRODUCTION_VM_NAME
 PRODUCTION_VM_ZONE
 PRODUCTION_DEPLOY_PATH
 ```
 
-Keep both deploy enable flags `false` until Artifact Registry, Workload Identity Federation, the Compute Engine VM and its `.env` file are configured.
+Keep deployment flags disabled until the corresponding VM, WIF configuration, Artifact Registry and root-owned runtime `.env` are ready.
 
-See [`docs/ci-cd.md`](docs/ci-cd.md) for the image delivery model and [`docs/gcp-staging.md`](docs/gcp-staging.md) for the staging infrastructure bootstrap.
+## Persistence and rollback
 
-## Runtime persistence
+The application image is disposable; state is not. Backups and restores must keep PostgreSQL and the matching Odoo filestore together.
 
-The image is disposable; state is not.
+For normal code-only releases, rollback selects a previous immutable image. If a deployment changed database/module metadata, restore the matching pre-deployment database and filestore as well.
 
-Persistent resources are kept separately:
-
-- PostgreSQL database -> Docker volume / persistent disk strategy
-- Odoo filestore -> Docker volume / persistent disk strategy
-- runtime secrets -> VM `.env`, never Git
-
-This separation means the Odoo application image can be rebuilt or rolled back without treating GitHub as a data store.
+See `docs/architecture.md`, `docs/ci-cd.md`, `docs/deployment.md` and `docs/gcp-staging.md` for details.

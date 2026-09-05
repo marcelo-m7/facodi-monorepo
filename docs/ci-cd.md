@@ -2,83 +2,60 @@
 
 ## Purpose
 
-`facodi-monorepo` is the composition and deployment repository for the FACODI Odoo runtime. It does not own the implementation of the feature addons.
+`facodi-monorepo` composes and deploys the FACODI Odoo runtime. Feature implementation remains in dedicated repositories.
 
-The active addon repositories are:
+Pinned components:
 
-- `https://github.com/marcelo-m7/facodi-learning.git` -> technical Odoo module `facodi_learning`
-- `https://github.com/marcelo-m7/facodi-theme.git` -> technical Odoo module `website_facodi`
+- `marcelo-m7/facodi-learning` -> `facodi_learning`;
+- `marcelo-m7/facodi-theme` -> `theme_facodi`;
+- `odoo/design-themes` -> upstream dependency, with only `theme_common` copied into the runtime image.
 
-They are consumed as pinned Git submodules under `addons/`.
+Current verified integration pins:
+
+```text
+facodi-theme: e10bebb051bd6c15c47915a986b7c2168c837265
+odoo/design-themes: a1818df4ade65406c0cacae8b1ea676e6f70095f
+```
 
 ## Build lifecycle
 
-A deployment is always based on an immutable image:
-
 ```text
 facodi-monorepo commit
-  + facodi-learning pinned commit
-  + facodi-theme pinned commit
-                |
-                v
-         docker/Dockerfile
-                |
-                v
-Artifact Registry image tagged with the monorepo Git SHA
-```
-
-The image path is:
-
-```text
-${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${GCP_ARTIFACT_REPOSITORY}/${FACODI_IMAGE_NAME}:${GITHUB_SHA}
+  + facodi-learning Gitlink
+  + facodi-theme Gitlink
+  + design-themes Gitlink
+             |
+             v
+      recursive checkout
+             |
+             v
+        Dockerfile
+  FACODI addons + theme_common only
+             |
+             v
+Artifact Registry :<monorepo-sha>
 ```
 
 The container never executes `git clone`, `git fetch`, `git checkout` or `git pull`.
 
-The Docker build copies the checked-out addon repositories to a build-only source directory, discovers immediate Odoo module directories containing `__manifest__.py`, and copies those modules to `/mnt/extra-addons`. This allows each addon repository to keep repository-level documentation, workflows and other files outside the technical Odoo module directory.
+## CI
 
-## One-time Google Cloud bootstrap
+Pull requests execute:
 
-The one-time infrastructure bootstrap is intentionally separate from recurring CI/CD.
+1. recursive submodule checkout;
+2. repository and GCP helper contracts;
+3. Compose validation;
+4. immutable Odoo 19 image build;
+5. PostgreSQL startup;
+6. clean installation of the discovered FACODI modules.
 
-```text
-operator + gcloud
-      |
-      v
-infrastructure/gcp/bootstrap-staging.sh
-      |
-      +--> required APIs
-      +--> Artifact Registry
-      +--> GitHub Workload Identity Federation
-      +--> deploy/runtime service accounts
-      +--> IAP + OS Login IAM
-      +--> dual-stack Compute Engine VM
-      +--> IPv4/IPv6 web firewall + IAP-only SSH
-```
+The `theme_facodi` repository has its own Odoo 19 CI and must be pinned only after that CI is green. Its CI verifies theme-template generation, frontend asset compilation, homepage rendering, standard favicon ownership and `/slides` rendering.
 
-Run:
+## Google Cloud authentication
 
-```bash
-GCP_PROJECT_ID=YOUR_PROJECT_ID \
-  bash infrastructure/gcp/bootstrap-staging.sh
-```
+GitHub Actions uses OpenID Connect and Workload Identity Federation. Do not create or upload a long-lived Google service-account JSON key.
 
-Then validate:
-
-```bash
-GCP_PROJECT_ID=YOUR_PROJECT_ID \
-  bash infrastructure/gcp/validate-staging.sh
-```
-
-The validator prints the exact repository/environment variables needed by GitHub Actions. See [`gcp-staging.md`](gcp-staging.md) for the operator procedure.
-
-The bootstrap does not create production resources, DNS records or application passwords.
-
-## GitHub authentication to Google Cloud
-
-GitHub Actions uses OpenID Connect and Google Workload Identity Federation. Do not create or upload a long-lived service-account JSON key.
-
-Repository Actions variables expected by the workflows:
+Repository Actions variables:
 
 ```text
 GCP_PROJECT_ID
@@ -91,138 +68,60 @@ DEPLOY_STAGING_ENABLED
 DEPLOY_PRODUCTION_ENABLED
 ```
 
-Recommended values for the current FACODI layout are conceptually:
-
-```text
-GCP_REGION=europe-southwest1
-GCP_ARTIFACT_REPOSITORY=facodi
-FACODI_IMAGE_NAME=odoo
-DEPLOY_STAGING_ENABLED=false
-DEPLOY_PRODUCTION_ENABLED=false
-```
-
-Use the actual Google Cloud project ID and Workload Identity resource names created for the project.
-
-The WIF provider is restricted to the exact GitHub repository `marcelo-m7/facodi-monorepo`. Artifact Registry access is scoped to the FACODI repository: the deploy identity is Writer and the VM runtime identity is Reader. The deploy identity also receives IAP Tunnel User and OS Admin Login, plus Service Account User on the VM runtime identity so OS Login can reach a VM with that service account attached.
-
-## Compute Engine runtime identity
-
-The VM uses its own `facodi-runtime` Google Cloud service account and pulls the exact SHA-tagged Artifact Registry image with short-lived credentials from the instance metadata identity.
-
-`deploy-image.sh` obtains an access token with:
-
-```bash
-gcloud auth print-access-token
-```
-
-and pipes that short-lived token to the Docker login command. Google Cloud CLI on a Compute Engine VM uses the attached service account through the metadata server by default.
-
-No Artifact Registry password or service-account JSON file is copied from GitHub to the VM.
-
-## Administrative access
-
-Staging SSH/SCP is forced through IAP TCP forwarding:
-
-```text
-GitHub Actions
-     |
-     | OIDC/WIF
-     v
-Google deploy service account
-     |
-     | IAP TCP tunnel
-     v
-VM internal IPv4 :22
-```
-
-The firewall allows TCP 22 only from Google's IAP TCP forwarding range `35.235.240.0/20` to instances tagged `facodi-admin`.
-
-There is no `0.0.0.0/0 -> tcp:22` or `::/0 -> tcp:22` rule created by the FACODI bootstrap.
-
-## Environment-specific GitHub variables
-
-### Staging environment
-
-```text
-STAGING_VM_NAME
-STAGING_VM_ZONE
-STAGING_DEPLOY_PATH
-```
-
-### Production environment
-
-```text
-PRODUCTION_VM_NAME
-PRODUCTION_VM_ZONE
-PRODUCTION_DEPLOY_PATH
-```
-
-Keep the repository variables `DEPLOY_STAGING_ENABLED` and `DEPLOY_PRODUCTION_ENABLED` set to `false` until the VMs, WIF provider, Artifact Registry repository and `.env` files are ready.
-
-A typical deployment path is `/opt/facodi`.
+The VM uses its own runtime service account and obtains short-lived Artifact Registry credentials through the Compute Engine metadata identity.
 
 ## VM `.env`
 
-The workflow deliberately does not overwrite `.env` on the server. Create it once on each VM and protect it with filesystem permissions.
+The workflow does not overwrite runtime secrets. Create `.env` once per environment and protect it with filesystem permissions.
 
-Required runtime values include:
+Required values include:
 
 ```text
 POSTGRES_PASSWORD
 ODOO_ADMIN_PASSWD
 ODOO_DB
-FACODI_MODULES=facodi_learning,website_facodi
+FACODI_MODULES=facodi_learning,theme_facodi
 ```
 
-`FACODI_IMAGE` is supplied by the deployment script for each release and does not need to be permanently pinned in `.env`.
-
-For staging, `/opt/facodi/.env` is root-owned with mode `0600`. The final deployment command runs `deploy-image.sh` through OS Login administrative `sudo`, so a GitHub service-account Unix identity does not need direct read access to the secret file. See [`gcp-staging.md`](gcp-staging.md).
+If an existing environment still contains `website_facodi`, `deploy-image.sh` normalizes that known legacy token for the deployment, but the operator should update the persisted `.env` after a successful transition.
 
 ## Deployment sequence
 
-For `staging` and `main`, when the respective deployment flag is enabled:
+For staging/production when enabled:
 
-1. GitHub checks out the monorepo and all Git submodules recursively.
-2. Repository architecture validation runs.
-3. GitHub obtains a short-lived Google credential through Workload Identity Federation.
-4. Docker discovers and bakes the technical Odoo modules from the pinned addon repositories into the image.
-5. The image is pushed to Artifact Registry under `${GITHUB_SHA}`.
-6. The deploy job authenticates to Google Cloud using WIF again.
-7. For staging, GitHub opens IAP SSH/SCP tunnels and copies only `docker-compose.yml`, `deploy-image.sh` and `healthcheck.sh` to the VM.
-8. The final staging deployment script runs under OS Login administrative `sudo` so it can read the root-owned `.env`.
-9. The VM obtains a short-lived Google access token from its own runtime identity and authenticates Docker to Artifact Registry.
-10. The VM pulls the exact SHA-tagged image.
-11. PostgreSQL is started.
-12. Missing FACODI modules are installed and already-installed FACODI modules are upgraded.
-13. Odoo is started from the immutable image.
-14. The HTTP health check must pass.
+1. checkout monorepo and recursive submodules;
+2. validate architecture and pins;
+3. authenticate GitHub to Google Cloud through WIF;
+4. build an immutable image containing `facodi_learning`, `theme_facodi` and `theme_common`;
+5. push the image tagged with `${GITHUB_SHA}`;
+6. copy Compose plus `deploy-image.sh`, `migrate-theme-module-name.sh`, `apply-facodi-theme.sh` and `healthcheck.sh` to the VM;
+7. pull the exact image using the VM identity;
+8. stop the persistent Odoo process and start PostgreSQL;
+9. run the guarded one-time legacy theme transition if required;
+10. install/update `facodi_learning` and `theme_facodi`;
+11. apply `theme_facodi` through Odoo's standard `button_choose_theme()` API;
+12. start Odoo and require the HTTP health check to pass.
 
-The VM does not need a clone of `facodi-monorepo` for application source code.
+The VM does not need a clone of the monorepo.
 
-## Updating addon versions
+## Why theme installation and application are separate
 
-The Gitlink entries in `facodi-monorepo` pin exact commits. To update an addon locally:
+Odoo native themes first install/register theme templates. A website then selects a theme through the Website theme lifecycle. Therefore deployment must not assume that `-i theme_facodi` alone changes the current website.
 
-```bash
-cd addons/facodi-learning
-git fetch
-git checkout <validated-commit>
-cd ../..
-git add addons/facodi-learning
-git commit -m "chore: update facodi-learning"
-```
+`scripts/apply-facodi-theme.sh` uses `ir.module.module.button_choose_theme()` with a `website_id` context. It skips websites already using `theme_facodi`, keeping subsequent deployments idempotent.
 
-Use the equivalent flow for `addons/facodi-theme`. Prefer commits whose addon repository CI has completed successfully.
+## Legacy `website_facodi` transition
 
-The monorepo CI then installs the exact pinned modules together on a clean Odoo 19 database. This catches integration failures that may not appear when each addon is tested independently.
+The previous presentation addon was not a native Odoo theme. Its single known inherited layout view cannot safely be renamed into the XML-ID namespace of `theme.ir.ui.view` templates.
+
+The migration helper therefore removes only the known old view/module metadata after checking for ambiguity. It refuses to proceed when unexpected XML IDs or dependent custom views exist, and it never edits `website_page` content.
+
+Take a PostgreSQL + filestore backup before the first deployment of this transition. If rollback is required after the transition, restore both persistent components with the previous image.
+
+## Updating pins
+
+Update a submodule only to a reviewed/verified commit, then commit the Gitlink change in this repository. The validator also enforces the exact `facodi-theme` and `odoo/design-themes` commits expected by the current integration.
 
 ## Rollback
 
-Rollback does not require source changes on the VM. Redeploy a previously known Artifact Registry image URI from an administrative session:
-
-```bash
-sudo -n bash scripts/deploy-image.sh \
-  europe-southwest1-docker.pkg.dev/<project>/facodi/odoo:<previous-monorepo-sha>
-```
-
-Database compatibility still matters: Odoo migrations performed by an addon may not always be reversible merely by downgrading the image. Database backups remain part of the production deployment policy.
+Normal code-only rollback redeploys a previously known Artifact Registry image URI. Database compatibility still matters. For the first legacy-theme transition, image rollback alone is insufficient; restore the matching pre-deployment PostgreSQL database and filestore.

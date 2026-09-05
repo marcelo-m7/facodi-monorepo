@@ -1,10 +1,10 @@
 # FACODI Google Cloud staging bootstrap
 
-This document provisions the Google Cloud resources required by the existing `staging` GitHub Actions deployment without creating long-lived Google credentials.
+This document provisions the Google Cloud resources required by the `staging` GitHub Actions deployment without creating long-lived Google credentials.
 
 ## What the bootstrap creates
 
-The bootstrap uses the current `gcloud` identity to create or validate:
+The bootstrap creates or validates:
 
 - required Google Cloud APIs;
 - Docker Artifact Registry repository `facodi`;
@@ -18,11 +18,9 @@ The bootstrap uses the current `gcloud` identity to create or validate:
 - dual-stack Compute Engine VM `facodi-app-01` on the existing FACODI subnet;
 - Docker Engine, Docker Compose and Google Cloud CLI on the VM.
 
-The bootstrap does **not** create DNS records, the VM `.env`, application passwords, or production resources.
+The bootstrap does **not** create DNS records, the VM `.env`, application passwords or production resources.
 
 ## Prerequisites
-
-Install and authenticate Google Cloud CLI on the operator machine:
 
 ```bash
 gcloud auth login
@@ -30,9 +28,7 @@ gcloud auth list
 gcloud projects describe YOUR_PROJECT_ID
 ```
 
-The target VPC/subnet must already exist and the subnet must be dual-stack with external IPv6 enabled.
-
-Default network values used by the repository are:
+The target subnet must already be dual-stack with external IPv6 enabled. Current defaults:
 
 ```text
 GCP_REGION=europe-southwest1
@@ -41,68 +37,28 @@ GCP_NETWORK=facodi-vpc
 GCP_SUBNET=facodi-madrid
 ```
 
-Inspect the subnet before bootstrap:
-
-```bash
-gcloud compute networks subnets describe facodi-madrid \
-  --project YOUR_PROJECT_ID \
-  --region europe-southwest1 \
-  --format='yaml(name,network,ipCidrRange,stackType,ipv6AccessType,externalIpv6Prefix)'
-```
-
-The expected values include:
+Expected subnet properties include:
 
 ```text
 stackType: IPV4_IPV6
 ipv6AccessType: EXTERNAL
 ```
 
-## One-time bootstrap
-
-Show the available configuration without credentials:
-
-```bash
-bash infrastructure/gcp/bootstrap-staging.sh --help
-```
-
-Run the bootstrap from an authenticated recursive clone of `facodi-monorepo`:
+## One-time bootstrap and validation
 
 ```bash
 GCP_PROJECT_ID=YOUR_PROJECT_ID \
   bash infrastructure/gcp/bootstrap-staging.sh
-```
 
-Optional values can be overridden without editing source code:
-
-```bash
-GCP_PROJECT_ID=YOUR_PROJECT_ID \
-GCP_ZONE=europe-southwest1-b \
-GCP_MACHINE_TYPE=e2-standard-2 \
-GCP_BOOT_DISK_SIZE=30GB \
-STAGING_VM_NAME=facodi-app-01 \
-  bash infrastructure/gcp/bootstrap-staging.sh
-```
-
-The scripts are designed to be re-run. Existing compatible resources are reused. Critical mismatches such as an IPv4-only subnet or an existing firewall rule on another VPC cause the bootstrap to stop instead of silently replacing resources.
-
-## Validate the cloud resources
-
-Run:
-
-```bash
 GCP_PROJECT_ID=YOUR_PROJECT_ID \
   bash infrastructure/gcp/validate-staging.sh
 ```
 
-A successful run prints the repository variables expected by GitHub Actions, including the full Workload Identity Provider resource name. It also prints the public IPv4 and IPv6 values allocated to the staging VM for later DNS configuration.
+The scripts are designed to be re-run. Existing compatible resources are reused; critical mismatches stop execution instead of replacing resources silently.
 
-## GitHub repository variables
+## GitHub variables
 
-Open:
-
-`facodi-monorepo -> Settings -> Secrets and variables -> Actions -> Variables`
-
-Add the values printed by `validate-staging.sh`:
+Repository Actions variables:
 
 ```text
 GCP_PROJECT_ID
@@ -114,11 +70,7 @@ GCP_GITHUB_SERVICE_ACCOUNT
 DEPLOY_STAGING_ENABLED=false
 ```
 
-Do not create `GOOGLE_CREDENTIALS`, `GCP_KEY`, `service-account.json` or another long-lived Google key for this pipeline.
-
-## GitHub staging environment variables
-
-Create or edit the GitHub environment named `staging` and add:
+GitHub environment `staging`:
 
 ```text
 STAGING_VM_NAME
@@ -126,11 +78,13 @@ STAGING_VM_ZONE
 STAGING_DEPLOY_PATH
 ```
 
-The default deploy path is `/opt/facodi`.
+Default deploy path: `/opt/facodi`.
+
+Do not create `GOOGLE_CREDENTIALS`, `GCP_KEY`, `service-account.json` or another long-lived Google key for this pipeline.
 
 ## Create the VM runtime `.env`
 
-Connect through IAP rather than public SSH:
+Connect through IAP:
 
 ```bash
 gcloud compute ssh facodi-app-01 \
@@ -139,29 +93,20 @@ gcloud compute ssh facodi-app-01 \
   --tunnel-through-iap
 ```
 
-On the VM, wait for the startup script if necessary:
-
-```bash
-sudo journalctl -u google-startup-scripts.service --no-pager
-sudo docker version
-sudo docker compose version
-gcloud --version
-```
-
-Generate the two sensitive values inside the SSH session so they never pass through GitHub:
+Generate sensitive values inside the SSH session:
 
 ```bash
 POSTGRES_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')"
 ODOO_ADMIN_PASSWD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(36))')"
 ```
 
-Create the runtime configuration as a **root-owned secret**. The GitHub OS Login identity does not need direct read access to `.env`; the final deployment script is executed with OS Login administrative `sudo` access.
+Create a root-owned secret file:
 
 ```bash
 sudo install -d -m 0755 /opt/facodi
 
 sudo tee /opt/facodi/.env >/dev/null <<EOF
-FACODI_MODULES=facodi_learning,website_facodi
+FACODI_MODULES=facodi_learning,theme_facodi
 POSTGRES_USER=odoo
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 ODOO_DB=facodi_staging
@@ -178,48 +123,48 @@ sudo chmod 600 /opt/facodi/.env
 unset POSTGRES_PASSWORD ODOO_ADMIN_PASSWD
 ```
 
-Store the generated Odoo master password in the project's secure credential store if operators need it later. Do not commit the `.env` file.
+If this VM already exists with `FACODI_MODULES=facodi_learning,website_facodi`, take a PostgreSQL + filestore backup before the first deployment of the native theme evolution. `deploy-image.sh` can normalize the old token for that deployment, but update the persisted file to `theme_facodi` afterward.
 
-This root-only ownership is intentional: a human operator and the GitHub service account use different OS Login Unix identities. Keeping `.env` owned by a human user with mode `600` would make automated deployment unable to read it.
+## Enable staging deployment
 
-## Enable the first staging deployment
-
-Only after all previous validation succeeds, change the repository variable:
+Only after infrastructure and runtime secrets are ready:
 
 ```text
 DEPLOY_STAGING_ENABLED=true
 ```
 
-Then either push a commit to `staging` or run the `Deploy staging` workflow manually.
+Then push to `staging` or manually run `Deploy staging`.
 
 The workflow will:
 
-1. resolve both addon submodules recursively;
-2. build one immutable Odoo image;
+1. resolve `facodi-learning`, `facodi-theme` and the pinned `odoo/design-themes` submodules recursively;
+2. build one immutable Odoo 19 image containing the FACODI modules plus only upstream `theme_common`;
 3. authenticate to Google Cloud through WIF;
 4. push the SHA-tagged image to Artifact Registry;
 5. connect to `facodi-app-01` through IAP;
-6. copy only Compose and deployment scripts;
-7. run the deployment script under OS Login administrative `sudo` so it can read root-owned runtime secrets;
-8. authenticate Docker with the VM runtime identity's short-lived access token;
-9. pull the exact image;
-10. install/update `facodi_learning` and `website_facodi`;
-11. start Odoo and perform the HTTP health check.
+6. copy Compose and the deployment/theme-transition helpers;
+7. run deployment under OS Login administrative `sudo` so the root-owned `.env` remains protected;
+8. pull the exact image using the VM runtime identity;
+9. stop Odoo and start PostgreSQL;
+10. perform the guarded legacy `website_facodi` cleanup if required;
+11. install/update `facodi_learning` and `theme_facodi`;
+12. apply `theme_facodi` through Odoo's standard theme-selection API;
+13. start Odoo and require the HTTP health check to pass.
+
+## First theme-transition rollback boundary
+
+The old `website_facodi` addon and the new native `theme_facodi` use different Odoo theme lifecycles. The migration helper removes only known legacy module/view metadata and refuses ambiguous states; it does not edit Website Builder pages.
+
+If the first transition deployment must be rolled back, restore the **pre-deployment PostgreSQL database and matching filestore together with the previous image**. Do not manually recreate old module metadata.
 
 ## DNS and reverse proxy
 
-The VM has IPv4 and IPv6, but Odoo remains bound to loopback ports `8069` and `8072`. The Google Cloud firewall exposes only TCP 80/443 publicly.
-
-Do not point public DNS at the VM until a reverse proxy with TLS has been configured. DNS/reverse-proxy configuration is intentionally a separate deployment step.
-
-The bootstrap reserves the external IPv4 address. The automatically assigned external IPv6 address is not treated as a separately reserved static IPv6 resource by this implementation.
+The VM has IPv4 and IPv6, while Odoo remains bound to loopback ports `8069` and `8072`. Public firewall exposure is limited to TCP 80/443. Point DNS at the VM only after reverse proxy and TLS configuration are ready.
 
 ## Re-running safely
-
-The bootstrap may be executed again after partial completion:
 
 ```bash
 GCP_PROJECT_ID=YOUR_PROJECT_ID bash infrastructure/gcp/bootstrap-staging.sh
 ```
 
-It does not delete the VPC, subnet, VM disks, Docker volumes or application data.
+The bootstrap does not delete the VPC, subnet, VM disks, Docker volumes or application data.

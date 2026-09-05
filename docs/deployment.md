@@ -2,51 +2,53 @@
 
 ## 1. Preparar a VM
 
-Instale Docker Engine, Docker Compose plugin, Google Cloud CLI e `curl`. O utilizador usado pelo mecanismo de `gcloud compute ssh` deve conseguir executar Docker e escrever no diretório de deployment.
+Instale Docker Engine, Docker Compose plugin, Google Cloud CLI e `curl`. O utilizador de deployment deve conseguir executar Docker e escrever no diretório de deployment.
 
-Exemplo:
+Diretório recomendado:
 
 ```text
 /opt/facodi
 ```
 
-A VM não precisa de clonar `facodi-monorepo` para executar a aplicação.
+A VM não precisa de clonar `facodi-monorepo`. O pipeline copia somente o Compose e os scripts de runtime.
 
-Crie apenas o diretório e o ficheiro persistente de configuração:
-
-```bash
-sudo mkdir -p /opt/facodi/infrastructure /opt/facodi/scripts
-sudo chown -R "$USER":"$USER" /opt/facodi
-cd /opt/facodi
-```
-
-Crie `/opt/facodi/.env` manualmente a partir de `.env.example` e substitua obrigatoriamente as palavras-passe de exemplo.
-
-Valores essenciais:
+Crie `/opt/facodi/.env` a partir de `.env.example`, substituindo as palavras-passe de exemplo:
 
 ```text
 POSTGRES_USER=odoo
 POSTGRES_PASSWORD=<strong-secret>
 ODOO_DB=facodi
 ODOO_ADMIN_PASSWD=<strong-secret>
-FACODI_MODULES=facodi_learning,website_facodi
+FACODI_MODULES=facodi_learning,theme_facodi
 ```
+
+Se um ambiente existente ainda tiver `website_facodi` na variável `FACODI_MODULES`, o novo `deploy-image.sh` normaliza esse token em memória durante o primeiro deployment. Atualize o `.env` permanente para `theme_facodi` após a transição.
 
 ## 2. Identidade da VM
 
-Associe à VM uma service account própria com permissão de leitura no Artifact Registry usado pelo FACODI.
+Associe à VM uma service account própria com permissão de leitura no Artifact Registry FACODI. `deploy-image.sh` obtém um token curto através de `gcloud auth print-access-token` e autentica o Docker no registry. Nenhuma chave JSON é copiada do GitHub.
 
-`deploy-image.sh` usa:
+## 3. Primeiro deployment com `theme_facodi`
 
-```bash
-gcloud auth configure-docker <region>-docker.pkg.dev --quiet
+Antes do primeiro deployment desta evolução numa base que já tenha `website_facodi`, crie um backup consistente de:
+
+```text
+PostgreSQL database + Odoo filestore
 ```
 
-A autenticação do pull é portanto obtida pela identidade da VM; nenhuma chave JSON do Google é copiada do GitHub.
+A imagem antiga isoladamente não é um rollback completo porque a transição remove metadata do antigo addon de apresentação.
 
-## 3. Primeiro arranque
+O pipeline deve copiar para `/opt/facodi`:
 
-Depois de existir uma imagem no Artifact Registry e de `docker-compose.yml`, `deploy-image.sh` e `healthcheck.sh` terem sido copiados pelo pipeline:
+```text
+infrastructure/docker-compose.yml
+scripts/deploy-image.sh
+scripts/migrate-theme-module-name.sh
+scripts/apply-facodi-theme.sh
+scripts/healthcheck.sh
+```
+
+Execute:
 
 ```bash
 cd /opt/facodi
@@ -54,28 +56,39 @@ bash scripts/deploy-image.sh \
   europe-southwest1-docker.pkg.dev/<project>/<repository>/<image>:<commit-sha>
 ```
 
-O script:
+O script executa a sequência:
 
-1. autentica Docker no Artifact Registry;
-2. faz pull apenas da imagem Odoo indicada;
-3. sobe PostgreSQL;
-4. deteta, para `facodi_learning` e `website_facodi`, se cada módulo deve ser instalado ou atualizado;
-5. executa a inicialização/upgrade Odoo com `--stop-after-init`;
-6. sobe o serviço Odoo;
-7. valida `/web/login` com o health check.
+1. autentica Docker no Artifact Registry e faz pull da imagem exata;
+2. inicia PostgreSQL e para o processo Odoo persistente antes de tocar na metadata;
+3. executa a transição guardada do antigo `website_facodi`, se ele existir;
+4. determina se `facodi_learning` e `theme_facodi` devem ser instalados ou atualizados;
+5. executa Odoo com `--stop-after-init` para instalação/upgrade;
+6. aplica `theme_facodi` a cada website através do método standard Odoo `button_choose_theme()`;
+7. inicia Odoo a partir da imagem imutável;
+8. valida `/web/login` com o health check.
+
+### Guardas da transição legada
+
+`scripts/migrate-theme-module-name.sh` recusa a alteração se encontrar uma situação que não corresponde ao antigo addon conhecido. Em particular, aborta quando:
+
+- `website_facodi` e `theme_facodi` já coexistem no registry;
+- `website_facodi` possui XML IDs inesperados; ou
+- outra view personalizada herda da antiga `website_facodi.website_layout`.
+
+O script não modifica `website_page` e não tenta converter XML IDs de uma view normal em templates de theme.
 
 ## 4. Reverse proxy
 
 O Compose publica Odoo apenas em loopback:
 
-- `127.0.0.1:8069` para HTTP Odoo;
-- `127.0.0.1:8072` para websocket/gevent.
+- `127.0.0.1:8069` — HTTP Odoo;
+- `127.0.0.1:8072` — websocket/gevent.
 
-O reverse proxy deve terminar TLS em 443 e encaminhar `/websocket` para 8072 e o restante tráfego para 8069.
+O reverse proxy deve terminar TLS em 443, encaminhar `/websocket` para 8072 e o restante tráfego para 8069.
 
 ## 5. GitHub Actions e Workload Identity Federation
 
-Configure como **Repository Actions variables**:
+Repository Actions variables:
 
 ```text
 GCP_PROJECT_ID
@@ -88,27 +101,18 @@ DEPLOY_STAGING_ENABLED=false
 DEPLOY_PRODUCTION_ENABLED=false
 ```
 
-A service account usada pelo GitHub deve ser federada ao repositório através de Workload Identity Federation e possuir apenas as permissões necessárias para publicar no Artifact Registry e operar o acesso de deployment à VM.
-
-Não configure um secret contendo service-account JSON.
-
-### Staging environment
+Environment variables:
 
 ```text
 STAGING_VM_NAME
 STAGING_VM_ZONE
 STAGING_DEPLOY_PATH=/opt/facodi
-```
-
-### Production environment
-
-```text
 PRODUCTION_VM_NAME
 PRODUCTION_VM_ZONE
 PRODUCTION_DEPLOY_PATH=/opt/facodi
 ```
 
-Ative cada variável `DEPLOY_*_ENABLED` apenas quando o ambiente correspondente estiver pronto.
+Não configure um secret contendo service-account JSON.
 
 ## 6. Fluxo de branches
 
@@ -116,18 +120,16 @@ Ative cada variável `DEPLOY_*_ENABLED` apenas quando o ambiente correspondente 
 feature/* -> pull request -> staging -> validação -> pull request -> main
 ```
 
-Um push em `staging`, quando habilitado, constrói a imagem SHA e publica em staging. Um push em `main`, quando habilitado, faz o mesmo para produção.
-
-Para produção, recomenda-se configurar o GitHub Environment `production` com aprovação obrigatória antes do job de deploy.
+Um push em `staging`, quando habilitado, constrói a imagem SHA e publica em staging. Um push em `main` faz o mesmo para produção. Recomenda-se aprovação obrigatória no GitHub Environment `production`.
 
 ## 7. DNS e firewall
 
-Aponte os registos A/AAAA do domínio do ambiente para os endereços externos da VM. No firewall da VPC, deixe públicos apenas 80/443; mantenha acesso administrativo restrito e não crie regras públicas para 8069, 8072 ou 5432.
+Aponte A/AAAA para os endereços externos da VM apenas quando o reverse proxy/TLS estiver pronto. Mantenha públicos somente 80/443; não exponha 8069, 8072 ou 5432.
 
 ## 8. Rollback
 
-O rollback de aplicação consiste em executar `deploy-image.sh` com um SHA antigo conhecido no Artifact Registry.
+Para releases sem alteração de dados, redeploy de uma imagem SHA anterior é suficiente.
 
-Esse mecanismo não substitui backups. Se uma versão de addon executar migrations irreversíveis, restaure também o PostgreSQL/filestore correspondentes conforme a política de backup.
+Para o primeiro deployment que efetua a transição `website_facodi -> theme_facodi`, se for necessário voltar atrás, restaure **a base PostgreSQL e o filestore pré-deployment** juntamente com a imagem antiga. Não reconstrua manualmente a metadata antiga do módulo.
 
-Para detalhes de CI/CD, submodules e IAM, consulte `docs/ci-cd.md`.
+Consulte `docs/ci-cd.md` para o fluxo completo de build/delivery e `docs/architecture.md` para a razão desta fronteira de rollback.
