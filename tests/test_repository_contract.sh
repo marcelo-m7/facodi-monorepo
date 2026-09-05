@@ -59,6 +59,11 @@ for workflow in .github/workflows/deploy-staging.yml .github/workflows/deploy-pr
   grep -Fq 'scripts/apply-facodi-theme.sh' "$workflow" || fail "$workflow must copy the standard theme application helper"
 done
 
+[[ -x tests/test_theme_transition.sh ]] || fail "disposable theme transition integration test must be executable"
+bash -n tests/test_theme_transition.sh
+grep -Fq 'test_theme_transition.sh' .github/workflows/ci.yml || fail "CI must exercise the legacy-to-native theme transition"
+grep -Fq 'theme_bewise' .github/workflows/ci.yml || fail "CI must verify unrelated design themes are absent from the image"
+
 grep -Fq 'FACODI_IMAGE' infrastructure/docker-compose.yml || fail "Compose must consume FACODI_IMAGE"
 if grep -Fq '../addons:/mnt/extra-addons' infrastructure/docker-compose.yml; then
   fail "Compose must not bind-mount addon source into the immutable runtime image"
