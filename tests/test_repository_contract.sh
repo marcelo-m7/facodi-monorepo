@@ -50,6 +50,15 @@ grep -Fq 'website_page' scripts/migrate-theme-module-name.sh && fail "migration 
 grep -Fq 'button_choose_theme' scripts/apply-facodi-theme.sh || fail "theme application must use Odoo standard theme selection API"
 grep -Fq 'website_id' scripts/apply-facodi-theme.sh || fail "theme application must support website-scoped selection"
 
+bash -n scripts/deploy-image.sh
+bash -n scripts/migrate-theme-module-name.sh
+bash -n scripts/apply-facodi-theme.sh
+
+for workflow in .github/workflows/deploy-staging.yml .github/workflows/deploy-production.yml; do
+  grep -Fq 'scripts/migrate-theme-module-name.sh' "$workflow" || fail "$workflow must copy the legacy transition helper"
+  grep -Fq 'scripts/apply-facodi-theme.sh' "$workflow" || fail "$workflow must copy the standard theme application helper"
+done
+
 grep -Fq 'FACODI_IMAGE' infrastructure/docker-compose.yml || fail "Compose must consume FACODI_IMAGE"
 if grep -Fq '../addons:/mnt/extra-addons' infrastructure/docker-compose.yml; then
   fail "Compose must not bind-mount addon source into the immutable runtime image"
