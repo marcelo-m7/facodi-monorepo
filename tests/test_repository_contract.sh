@@ -45,6 +45,10 @@ grep -Fq 'theme_facodi' scripts/migrate-theme-module-name.sh || fail "migration 
 grep -Fq 'ir_module_module' scripts/migrate-theme-module-name.sh || fail "migration must reconcile the module registry"
 grep -Fq 'ir_model_data' scripts/migrate-theme-module-name.sh || fail "migration must reconcile XML-ID ownership"
 grep -Fq 'website_page' scripts/migrate-theme-module-name.sh && fail "migration must not mutate Website Builder pages"
+grep -Fq 'pg_isready' scripts/migrate-theme-module-name.sh || fail "migration must wait for PostgreSQL readiness before registry queries"
+if grep -n "old_state=.*|| true\|new_state=.*|| true" scripts/migrate-theme-module-name.sh; then
+  fail "migration must not reinterpret registry query failures as an absent legacy module"
+fi
 
 [[ -x scripts/apply-facodi-theme.sh ]] || fail "theme application helper must be executable"
 grep -Fq 'button_choose_theme' scripts/apply-facodi-theme.sh || fail "theme application must use Odoo standard theme selection API"
