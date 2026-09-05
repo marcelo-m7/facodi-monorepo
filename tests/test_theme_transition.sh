@@ -73,14 +73,14 @@ done
 # transform into the historical presentation-only module for this disposable DB.
 "${COMPOSE[@]}" run --rm odoo \
   --stop-after-init \
-  --without-demo=all \
+  --without-demo=True \
   -d "$TRANSITION_DB" \
   -i website_slides
 
 # Seed the one view owned by the historical website_facodi addon while the
-# registry is still valid. We intentionally do this before marking the legacy
-# module installed because that code is not present in the new image.
-"${COMPOSE[@]}" run --rm -T odoo shell -d "$TRANSITION_DB" <<'PY'
+# registry is still valid. For Odoo's `shell` subcommand the official image
+# entrypoint requires the `odoo` executable to be explicit.
+"${COMPOSE[@]}" run --rm -T odoo odoo shell -d "$TRANSITION_DB" <<'PY'
 layout = env.ref("website.layout")
 legacy = env["ir.ui.view"].create({
     "name": "FACODI Website Layout (legacy transition fixture)",
@@ -157,13 +157,13 @@ bash scripts/migrate-theme-module-name.sh
 # Reinstall the new native theme through the normal Odoo module lifecycle.
 "${COMPOSE[@]}" run --rm odoo \
   --stop-after-init \
-  --without-demo=all \
+  --without-demo=True \
   -d "$TRANSITION_DB" \
   -i theme_facodi
 
 bash scripts/apply-facodi-theme.sh
 
-"${COMPOSE[@]}" run --rm -T odoo shell -d "$TRANSITION_DB" <<'PY'
+"${COMPOSE[@]}" run --rm -T odoo odoo shell -d "$TRANSITION_DB" <<'PY'
 theme = env["ir.module.module"].search(
     [("name", "=", "theme_facodi"), ("state", "=", "installed")], limit=1
 )
