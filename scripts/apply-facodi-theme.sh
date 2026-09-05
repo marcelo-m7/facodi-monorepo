@@ -5,10 +5,20 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
 [[ -f .env ]] || { echo "missing $ROOT_DIR/.env" >&2; exit 66; }
+
+# deploy-image.sh selects the exact immutable image for this release in the
+# process environment. Keep that value authoritative even if the persisted VM
+# .env still contains an older/local FACODI_IMAGE entry.
+INHERITED_FACODI_IMAGE="${FACODI_IMAGE-}"
+
 set -a
 # shellcheck disable=SC1091
 source .env
 set +a
+
+if [[ -n "$INHERITED_FACODI_IMAGE" ]]; then
+  export FACODI_IMAGE="$INHERITED_FACODI_IMAGE"
+fi
 
 : "${ODOO_DB:?ODOO_DB must be set in .env}"
 
