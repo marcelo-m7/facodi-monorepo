@@ -7,7 +7,9 @@ LABEL org.opencontainers.image.source="https://github.com/marcelo-m7/facodi-mono
 USER root
 COPY addons/ /opt/facodi-addon-sources/
 COPY vendor/odoo-design-themes/theme_common/ /opt/odoo-theme-common/
+COPY docker/facodi-odoo-server.sh /usr/local/bin/facodi-odoo-server
 RUN set -eux; \
+    chmod 0755 /usr/local/bin/facodi-odoo-server; \
     mkdir -p /mnt/extra-addons; \
     found=0; \
     for manifest in /opt/facodi-addon-sources/*/*/__manifest__.py; do \
