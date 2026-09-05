@@ -11,7 +11,7 @@ permissions:
 jobs:
   validate-and-build:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       POSTGRES_USER: odoo
       POSTGRES_PASSWORD: ci-password
@@ -39,8 +39,20 @@ jobs:
       - name: Build immutable Odoo image
         run: docker build --pull -f docker/Dockerfile -t "$FACODI_IMAGE" .
 
+      - name: Inspect immutable image contents
+        run: |
+          docker run --rm --entrypoint bash "$FACODI_IMAGE" -lc '
+            test -f /mnt/extra-addons/facodi_learning/__manifest__.py &&
+            test -f /mnt/extra-addons/theme_facodi/__manifest__.py &&
+            test -f /mnt/extra-addons/theme_common/__manifest__.py &&
+            test ! -d /mnt/extra-addons/theme_bewise
+          '
+
       - name: Start PostgreSQL
         run: docker compose -f infrastructure/docker-compose.yml up -d db
+
+      - name: Validate legacy-to-native theme transition
+        run: bash tests/test_theme_transition.sh
 
       - name: Install discovered FACODI modules on a clean database
         run: |
