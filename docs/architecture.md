@@ -31,7 +31,7 @@ Pins de composição desta evolução:
 
 ```text
 addons/facodi-theme
-  -> 04c85cdf2d421e29a6ff9d60318e48ba1f306bad
+  -> eca3c2c5ec3e601559cb5d6e7415c892be938fd7
   -> technical module: theme_facodi
 
 vendor/odoo-design-themes

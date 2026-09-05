@@ -13,7 +13,7 @@ Pinned components:
 Current verified integration pins:
 
 ```text
-facodi-theme: 04c85cdf2d421e29a6ff9d60318e48ba1f306bad
+facodi-theme: eca3c2c5ec3e601559cb5d6e7415c892be938fd7
 odoo/design-themes: a1818df4ade65406c0cacae8b1ea676e6f70095f
 ```
 

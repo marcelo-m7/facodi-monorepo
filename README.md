@@ -28,7 +28,7 @@ odoo/design-themes          -> theme_common only
 
 The theme dependency is pinned at `odoo/design-themes@a1818df4ade65406c0cacae8b1ea676e6f70095f`. The Docker image copies **only** `theme_common`; unrelated official themes are not baked into the runtime.
 
-The currently verified FACODI theme pin is `marcelo-m7/facodi-theme@04c85cdf2d421e29a6ff9d60318e48ba1f306bad`.
+The currently verified FACODI theme pin is `marcelo-m7/facodi-theme@eca3c2c5ec3e601559cb5d6e7415c892be938fd7`.
 
 GitHub authenticates to Google Cloud with **OIDC + Workload Identity Federation**. Long-lived service-account JSON keys are not part of the design. The running Odoo container never performs `git pull` or any other source checkout.
 
