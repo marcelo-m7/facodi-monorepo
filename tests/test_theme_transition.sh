@@ -53,6 +53,18 @@ ODOO_MAX_CRON_THREADS=0
 ODOO_HEALTHCHECK_URL=http://127.0.0.1:8069/web/login
 EOF
 
+# `docker compose up -d db` returns before PostgreSQL's first-time initdb has
+# necessarily completed. Wait on the server itself before creating fixtures.
+ready=0
+for _attempt in $(seq 1 30); do
+  if "${COMPOSE[@]}" exec -T db pg_isready -U "$POSTGRES_USER" -d postgres >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  sleep 2
+done
+[[ "$ready" -eq 1 ]] || { echo "PostgreSQL did not become ready for transition test" >&2; exit 1; }
+
 "${COMPOSE[@]}" exec -T db dropdb -U "$POSTGRES_USER" --if-exists "$TRANSITION_DB" >/dev/null 2>&1 || true
 "${COMPOSE[@]}" exec -T db createdb -U "$POSTGRES_USER" "$TRANSITION_DB"
 
