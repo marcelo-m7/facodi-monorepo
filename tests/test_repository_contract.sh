@@ -29,6 +29,13 @@ if grep -Eq 'git[[:space:]]+(pull|fetch|checkout|clone)' scripts/deploy-image.sh
   fail "runtime deployment must not update application source with git"
 fi
 
+[[ -x scripts/migrate-theme-module-name.sh ]] || fail "theme transition migration must be executable"
+grep -Fq 'website_facodi' scripts/migrate-theme-module-name.sh || fail "migration must recognize the legacy module"
+grep -Fq 'theme_facodi' scripts/migrate-theme-module-name.sh || fail "migration target missing"
+grep -Fq 'ir_module_module' scripts/migrate-theme-module-name.sh || fail "migration must reconcile the module registry"
+grep -Fq 'ir_model_data' scripts/migrate-theme-module-name.sh || fail "migration must reconcile XML-ID ownership"
+grep -Fq 'website_page' scripts/migrate-theme-module-name.sh && fail "migration must not mutate Website Builder pages"
+
 grep -Fq 'FACODI_IMAGE' infrastructure/docker-compose.yml || fail "Compose must consume FACODI_IMAGE"
 if grep -Fq '../addons:/mnt/extra-addons' infrastructure/docker-compose.yml; then
   fail "Compose must not bind-mount addon source into the immutable runtime image"
