@@ -54,7 +54,7 @@ Component repositories are cloned under `workspace/`, which is ignored by this r
 
 ## Current program
 
-The active product restructuring is tracked in this repository as a Program and vertical increments. The existing implementation Epic in `facodi-deploy` remains the integration/release tracker and continues to reference the component issues already created across `facodi-learning`, `facodi-theme`, `facodi-ai` and `facodi-deploy`.
+The active product restructuring is tracked by [Program #7](https://github.com/marcelo-m7/facodi-monorepo/issues/7) and its vertical increments. The existing [integration/release Epic in `facodi-deploy`](https://github.com/marcelo-m7/facodi-deploy/issues/20) continues to reference the component issues already created across `facodi-learning`, `facodi-theme`, `facodi-ai` and `facodi-deploy`.
 
 The first product slice is:
 
