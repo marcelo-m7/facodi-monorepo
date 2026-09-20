@@ -1,0 +1,50 @@
+version: 1
+purpose: facodi-agent-engineering-workspace
+
+repositories:
+  facodi-learning:
+    url: https://github.com/marcelo-m7/facodi-learning.git
+    path: workspace/facodi-learning
+    owns:
+      - curriculum
+      - elearning-domain
+      - coverage
+      - functional-website-routes
+  facodi-theme:
+    url: https://github.com/marcelo-m7/facodi-theme.git
+    path: workspace/facodi-theme
+    owns:
+      - website-theme
+      - ux
+      - responsive-presentation
+  facodi-ai:
+    url: https://github.com/marcelo-m7/facodi-ai.git
+    path: workspace/facodi-ai
+    owns:
+      - ai-runtime
+      - provider-integrations
+  monodoo:
+    url: https://github.com/marcelo-m7/monodoo.git
+    path: workspace/monodoo
+    owns:
+      - generic-backend-ux
+  monynha-odoo:
+    url: https://github.com/marcelo-m7/monynha-odoo.git
+    path: workspace/monynha-odoo
+    owns:
+      - explicitly-consumed-shared-components
+  facodi-deploy:
+    url: https://github.com/marcelo-m7/facodi-deploy.git
+    path: workspace/facodi-deploy
+    owns:
+      - deployment
+      - release-pins
+      - migration-gate
+      - coolify
+      - rollback
+
+promotion:
+  production_source: facodi-deploy
+  allow_unmerged_workspace_commits: false
+  require_component_pr: true
+  require_deploy_acceptance: true
