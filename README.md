@@ -42,6 +42,9 @@ See [AGENTS.md](AGENTS.md), [ARCHITECTURE.md](ARCHITECTURE.md), [WORKSPACE.yaml]
 
 ## Program operating model
 
+Program tracker: https://github.com/marcelo-m7/facodi-monorepo/issues/20  
+GitHub Project board setup: https://github.com/marcelo-m7/facodi-monorepo/issues/44
+
 The approved operating model is documented in [`docs/superpowers/specs/2026-09-24-facodi-program-operating-model-design.md`](docs/superpowers/specs/2026-09-24-facodi-program-operating-model-design.md).
 
 FACODI is coordinated through eight workstreams:
