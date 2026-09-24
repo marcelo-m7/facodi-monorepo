@@ -8,8 +8,8 @@ It is **not the production deployment source of truth**. Production composition,
 
 ```text
 facodi-monorepo
-  engineering control plane
-  specs · plans · ADRs · agent instructions · integration contracts
+  program + engineering control plane
+  specs · plans · ADRs · backlog · agent instructions · integration contracts
         |
         +----> facodi-learning   curriculum/eLearning/domain
         +----> facodi-theme      public Website/UI/UX
@@ -22,7 +22,7 @@ facodi-monorepo
                pins · image · migrations · CI acceptance · Coolify · rollback
 ```
 
-Odoo remains the operational/data control plane.
+Odoo remains the **operational/data control plane** and canonical source for FACODI product/domain records. Supabase is an **auxiliary/experimental capability** only; it is not a second source of truth and cannot become a production dependency without an explicit increment, security/observability contract and tests.
 
 ## Repository contract
 
@@ -31,13 +31,31 @@ Odoo remains the operational/data control plane.
 - A workspace checkout may combine branches from several repositories for integration testing.
 - Only merged/approved component commits may be promoted into `facodi-deploy`.
 - Deployment code must not be added here. Existing deployment-era files are legacy material pending an explicit parity/retirement issue.
-- Agent work is organized as **Program → Increment → component issues → PRs → integration → deploy acceptance**.
-- Work is classified as:
+- Agent work is organized as **Program → Workstream/Outcome → component issues → PRs → integration → deploy acceptance**.
+- Priority uses **P0/P1/P2/P3**; execution gates use:
   - **AFK** — autonomous technical implementation;
   - **REVIEW** — independent code/integration review required;
   - **HITL** — a real editorial, operational or production decision requires a human.
+- Marketing, community, partnerships and funding work are first-class program work even when they do not touch code.
 
-See [AGENTS.md](AGENTS.md), [ARCHITECTURE.md](ARCHITECTURE.md) and [WORKSPACE.yaml](WORKSPACE.yaml).
+See [AGENTS.md](AGENTS.md), [ARCHITECTURE.md](ARCHITECTURE.md), [WORKSPACE.yaml](WORKSPACE.yaml), the [program workstreams](docs/program/workstreams.md), and [intake/routing rules](docs/program/intake-and-routing.md).
+
+## Program operating model
+
+The approved operating model is documented in [`docs/superpowers/specs/2026-09-24-facodi-program-operating-model-design.md`](docs/superpowers/specs/2026-09-24-facodi-program-operating-model-design.md).
+
+FACODI is coordinated through eight workstreams:
+
+1. Product & UX
+2. Content & Curation
+3. Odoo Engineering
+4. Theme, i18n & Accessibility
+5. AI & Automation
+6. Community & Marketing
+7. Partnerships & Funding
+8. Operations & Release
+
+New ideas enter through the program control plane, receive a workstream, outcome, priority, owner/proposed owner and target repository/system, then move to the repository or operational surface that actually owns the implementation.
 
 ## Bootstrap
 
